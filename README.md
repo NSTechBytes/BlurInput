@@ -117,14 +117,6 @@ AllowedCharacters=abc123
 
 ---
 
-## Screenshots 🌈
-
-Here’s a preview of the BlurInput field in action:
-
-![BlurInput Example](https://github.com/NSTechBytes/BlurInput/blob/main/My%20Video-2.mp4)
-
----
-
 ## Contributing 🤝
 
 Contributions are welcome! If you have ideas for enhancements, bug fixes, or additional features, please submit an issue or pull request.
