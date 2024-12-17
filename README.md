@@ -1,6 +1,5 @@
-Here's a polished GitHub README file for your **BlurInput** plugin:
 
----
+
 
 # BlurInput
 
