@@ -30,7 +30,7 @@ Here's a polished GitHub README file for your **BlurInput** plugin:
 
 ## Installation 📥
 
-1. Download the latest release from the [Releases](https://github.com/yourusername/BlurInput/releases) section.
+1. Download the latest release from the [Releases](https://github.com/NSTechBytes/BlurInput/releases) section.
 2. Copy the `BlurInput.dll` file to the **Plugins** folder of your Rainmeter installation:
    ```
    C:\Program Files\Rainmeter\Plugins
@@ -121,7 +121,7 @@ AllowedCharacters=abc123
 
 Here’s a preview of the BlurInput field in action:
 
-![BlurInput Example](https://via.placeholder.com/600x300.png?text=BlurInput+Screenshot)
+![BlurInput Example](https://github.com/NSTechBytes/BlurInput/blob/main/My%20Video-2.mp4)
 
 ---
 
