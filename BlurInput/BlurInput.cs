@@ -5,12 +5,14 @@ Update=0
 [InputHandler]
 Measure=Plugin
 Plugin=BlurInput
+MeasureName=#CURRENTSECTION#
 MeterName=
 Cursor=|
 Password= (0,1)
 Multiline= (0,1)
 Limit= (0 for not Limit fix)
 Width= (0 for not Width fix)
+FormatMultiline=0
 DefaultValue=
 InputType= (String,Integer,Float,Letters,Alphanumeric,Hexadecimal,Email,Custom) any one
 OnEnterAction=[!Log "Log:[InputHandler]"]
@@ -30,6 +32,8 @@ using System.Windows.Forms;
 using Rainmeter;
 using System.Drawing;
 using System.Diagnostics;
+using System.Timers;
+
 
 
 namespace PluginBlurInput
@@ -37,6 +41,7 @@ namespace PluginBlurInput
     internal class Measure
     {
         private string MeterName = "";
+        private string MeasureName = "";
         private string TextBuffer = "";
         private string OnEnterAction;
         private string OnESCAction;
@@ -44,6 +49,7 @@ namespace PluginBlurInput
         private int CursorPosition = 0;
         private Rainmeter.API Api;
         private string defaultValue = "";
+        private int FormatMultiline = 0;
 
         private Stack<string> UndoStack = new Stack<string>();
         private Stack<string> RedoStack = new Stack<string>();
@@ -61,6 +67,9 @@ namespace PluginBlurInput
         private string AllowedCharacters = "";
         private bool isTextCleared = false;
         private bool isInitialized = false;
+        private System.Timers.Timer updateTimer;
+        private const double UpdateInterval = 25; 
+      
 
         public string GetUserInput()
         {
@@ -93,7 +102,14 @@ namespace PluginBlurInput
         {
             Api = api;
 
+            updateTimer = new System.Timers.Timer(UpdateInterval);
+            updateTimer.Elapsed += (sender, e) => Update();
+            updateTimer.AutoReset = true;
+      
+
             MeterName = api.ReadString("MeterName", "");
+            FormatMultiline = api.ReadInt("FormatMultiline", 0);
+            MeasureName = api.ReadString("MeasureName", "");
             Cursor = api.ReadString("Cursor", "|");
             IsPassword = api.ReadInt("Password", 0) == 1;
             IsMultiline = api.ReadInt("Multiline", 0) == 1;
@@ -149,6 +165,8 @@ namespace PluginBlurInput
         {
             if (!IsActive || string.IsNullOrEmpty(MeterName))
                 return;
+
+
 
             bool ctrlPressed = (GetAsyncKeyState(17) & 0x8000) != 0;
             bool shiftPressed = (GetAsyncKeyState(16) & 0x8000) != 0;
@@ -288,6 +306,7 @@ namespace PluginBlurInput
                     }
                     else
                     {
+                        UpdateMeasure();
                         Api.Execute(OnEnterAction);
                         ValidateAndSubmitText();
                         Stop();
@@ -496,17 +515,30 @@ namespace PluginBlurInput
             return true;
         }
 
+        internal void ConvertTextBufferToSingleLine()
+        {
+            if (!string.IsNullOrEmpty(TextBuffer))
+            {
+                if(FormatMultiline == 1)
+                {
+                    TextBuffer = TextBuffer.Replace("\r\n", " ").Replace("\n", " ");
+                }
+            }
+        }
+
+
         //=================================================================================================================================//
         //                                                      KeyBoard Functions                                                         //
         //=================================================================================================================================//
 
         private void HandleCtrlEnter()
         {
-
+            ConvertTextBufferToSingleLine();
+            UpdateMeasure();
             Api.Execute(OnEnterAction);
             Stop();
         }
-        // internal void ClearText()
+     
         internal void CopyToClipboard()
         {
             if (!string.IsNullOrEmpty(TextBuffer))
@@ -593,9 +625,22 @@ namespace PluginBlurInput
             }
 
             Api.Execute($"!SetOption {MeterName} Text \"{displayText}\"");
-            Api.Execute("!UpdateMeter *");
-            Api.Execute("!Redraw");
+            Api.Execute($"!UpdateMeter *");          
+            Api.Execute($"!Redraw");
         }
+
+        private void UpdateMeasure()
+        {
+            if (!IsActive || string.IsNullOrEmpty(MeasureName) || string.IsNullOrEmpty(MeterName))
+                return;
+
+            Api.Execute($"!SetOption {MeterName} Text \"{TextBuffer}\"");
+            Api.Execute($"!SetOption {MeasureName} DefaultValue \"{TextBuffer}\"");
+            Api.Execute($"!UpdateMeter {MeterName}");
+            Api.Execute($"!UpdateMeasure {MeasureName}");
+          
+        }
+
         //=================================================================================================================================//
         //                                                     Bangs Functions                                                             //
         //=================================================================================================================================//
@@ -613,6 +658,7 @@ namespace PluginBlurInput
             IsActive = true;
             CursorPosition = TextBuffer.Length;
             UpdateText();
+            updateTimer.Start();
         }
         internal void ShowContextForm()
         {
@@ -630,12 +676,14 @@ namespace PluginBlurInput
             CursorPosition = 0;
             UndoStack.Clear();
             RedoStack.Clear();
+            updateTimer.Stop();
+            UpdateMeasure();
 
             if (!string.IsNullOrEmpty(MeterName))
             {
                 Api.Execute($"!SetOption {MeterName} Text \"{defaultValue}\"");
-                Api.Execute("!UpdateMeter *");
-                Api.Execute("!Redraw");
+                Api.Execute($"!UpdateMeter *");
+                Api.Execute($"!Redraw");
             }
         }
     }
@@ -655,8 +703,10 @@ namespace PluginBlurInput
         [DllExport]
         public static void Finalize(IntPtr data)
         {
+            Measure measure = (Measure)GCHandle.FromIntPtr(data).Target;
+            measure.Stop();
             GCHandle.FromIntPtr(data).Free();
-            if (stringBuffer != IntPtr.Zero)
+            if (stringBuffer != IntPtr.Zero) 
             {
                 Marshal.FreeHGlobal(stringBuffer);
                 stringBuffer = IntPtr.Zero;
