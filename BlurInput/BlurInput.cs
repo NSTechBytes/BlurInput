@@ -404,22 +404,54 @@ namespace PluginBlurInput
                     }
                     return;
 
-                case 46:
+                case 46: // Delete Key
                     if (CursorPosition < TextBuffer.Length)
                     {
-                        TextBuffer = TextBuffer.Remove(CursorPosition, 1);
+                        // Check if the current position is just before a "#CRLF#"
+                        if (CursorPosition + 6 <= TextBuffer.Length && TextBuffer.Substring(CursorPosition, 6) == "#CRLF#")
+                        {
+                            // Remove the entire "#CRLF#" sequence
+                            TextBuffer = TextBuffer.Remove(CursorPosition, 6);
+                        }
+                        else
+                        {
+                            // Remove a single character at the cursor position
+                            TextBuffer = TextBuffer.Remove(CursorPosition, 1);
+                        }
                     }
                     return;
 
-                case 37:
+
+                case 37: // Left Arrow Key
                     if (CursorPosition > 0)
-                        CursorPosition--;
+                    {
+                        // Check if the cursor is before a "#CRLF#" sequence
+                        if (CursorPosition >= 6 && TextBuffer.Substring(CursorPosition - 6, 6) == "#CRLF#")
+                        {
+                            CursorPosition -= 6; // Move back across the "#CRLF#" sequence
+                        }
+                        else
+                        {
+                            CursorPosition--; // Otherwise, move one position to the left
+                        }
+                    }
+                    return; 
+
+                case 39: // Right Arrow Key
+                    if (CursorPosition < TextBuffer.Length)
+                    {
+                        // Check if the cursor is after a "#CRLF#" sequence
+                        if (CursorPosition + 6 <= TextBuffer.Length && TextBuffer.Substring(CursorPosition, 6) == "#CRLF#")
+                        {
+                            CursorPosition += 6; // Move forward across the "#CRLF#" sequence
+                        }
+                        else
+                        {
+                            CursorPosition++; // Otherwise, move one position to the right
+                        }
+                    }
                     return;
 
-                case 39:
-                    if (CursorPosition < TextBuffer.Length)
-                        CursorPosition++;
-                    return;
 
                 case 36:
                     CursorPosition = 0;
