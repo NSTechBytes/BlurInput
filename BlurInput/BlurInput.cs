@@ -268,7 +268,6 @@ namespace PluginBlurInput
                         HandleSpecialKeys(i, shiftPressed, ctrlPressed);
                     }
 
-
                     UpdateText();
                 }
             }
@@ -362,12 +361,25 @@ namespace PluginBlurInput
 
             switch (keyCode)
             {
-                case 8:
+                case 8: // Backspace operation
                     if (CursorPosition > 0)
                     {
-                        TextBuffer = TextBuffer.Remove(CursorPosition - 1, 1);
-                        CursorPosition--;
+                        // Check if the previous characters are "#CRLF#"
+                        if (CursorPosition >= 6 && TextBuffer.Substring(CursorPosition - 6, 6) == "#CRLF#")
+                        {
+                            // Remove the entire "#CRLF#" sequence
+                            TextBuffer = TextBuffer.Remove(CursorPosition - 6, 6);
+                            CursorPosition -= 6; // Adjust cursor position after removal
+                        }
+                        else
+                        {
+                            // Otherwise, remove just one character
+                            TextBuffer = TextBuffer.Remove(CursorPosition - 1, 1);
+                            CursorPosition--; // Adjust cursor position
+                        }
                     }
+                    //break;
+
                     return;
 
                 case 27:
@@ -666,7 +678,7 @@ namespace PluginBlurInput
         private void HandleCtrlEnter()
         {
             TextBuffer = TextBuffer.Replace("\r\n", "#CRLF#").Replace("\n", "#CRLF#");
-          //  UpdateMeasure();
+          //UpdateMeasure();
             Api.Execute(OnEnterAction);
             Stop();
         }
@@ -784,9 +796,13 @@ namespace PluginBlurInput
             }
 
             IsActive = true;
+            TextBuffer = TextBuffer.Replace("#CRLF#", "\n");
             CursorPosition = TextBuffer.Length;
             UpdateText();
             updateTimer.Start();
+
+            Api.Execute($"!Log  \"{TextBuffer}\"");
+
 
             if (!hasResetOnce)
             {
