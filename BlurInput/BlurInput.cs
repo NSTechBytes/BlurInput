@@ -5,7 +5,7 @@ Update=0
 [InputHandler]
 Measure=Plugin
 Plugin=BlurInput
-MeasureName=#CURRENTSECTION#
+ParentMeasureName=#CURRENTSECTION#
 MeterName=
 Cursor=|
 Password= (0,1)
@@ -17,6 +17,8 @@ DefaultValue=
 InputType= (String,Integer,Float,Letters,Alphanumeric,Hexadecimal,Email,Custom) any one
 OnEnterAction=[!Log "Log:[InputHandler]"]
 OnESCAction=[!Log "[InputHandler]"]
+SkinUnFocusDismiss=1
+DismissAction=
 DynamicVariables=1
 ==================================================================================================================================================*/
 
@@ -45,11 +47,12 @@ namespace PluginBlurInput
         private string TextBuffer = "";
         private string OnEnterAction;
         private string OnESCAction;
+        private string DismissAction;
         private string Cursor = "|";
         private int CursorPosition = 0;
         private Rainmeter.API Api;
         private string defaultValue = "";
-        private int FormatMultiline = 0;
+      
 
         private Stack<string> UndoStack = new Stack<string>();
         private Stack<string> RedoStack = new Stack<string>();
@@ -68,8 +71,14 @@ namespace PluginBlurInput
         private bool isTextCleared = false;
         private bool isInitialized = false;
         private System.Timers.Timer updateTimer;
-        private const double UpdateInterval = 25; 
-      
+        private const double UpdateInterval = 25;
+
+        private string TargetWindowTitle = string.Empty;
+        private int UnFocusDismiss = 0;
+
+        private System.Timers.Timer resetTimer;
+        private bool hasResetOnce = false;
+
 
         public string GetUserInput()
         {
@@ -94,6 +103,15 @@ namespace PluginBlurInput
         [DllImport("user32.dll")]
         private static extern bool GetKeyboardState(byte[] lpKeyState);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
         //=================================================================================================================================//
         //                                                      Reload                                                                     //
         //=================================================================================================================================//
@@ -105,19 +123,25 @@ namespace PluginBlurInput
             updateTimer = new System.Timers.Timer(UpdateInterval);
             updateTimer.Elapsed += (sender, e) => Update();
             updateTimer.AutoReset = true;
-      
+
 
             MeterName = api.ReadString("MeterName", "");
-            FormatMultiline = api.ReadInt("FormatMultiline", 0);
-            MeasureName = api.ReadString("MeasureName", "");
+            UnFocusDismiss = api.ReadInt("SkinUnFocusDismiss", 0);
+           
+            MeasureName = api.ReadString("ParentMeasureName", "");
             Cursor = api.ReadString("Cursor", "|");
             IsPassword = api.ReadInt("Password", 0) == 1;
             IsMultiline = api.ReadInt("Multiline", 0) == 1;
             CharacterLimit = api.ReadInt("Limit", 0);
             OnEnterAction = api.ReadString("OnEnterAction", "").Trim();
+            DismissAction = api.ReadString("DismissAction", "").Trim();
             OnESCAction = api.ReadString("OnESCAction", "").Trim();
             defaultValue = api.ReadString("DefaultValue", "").Trim();
             Width = api.ReadInt("Width", 0);
+            string rootConfigPath = api.ReplaceVariables("#ROOTCONFIGPATH#");
+            string currentFile = api.ReplaceVariables("#CURRENTFILE#");
+
+
 
             InputType = api.ReadString("InputType", "String").Trim();
             if (InputType != "String" && InputType != "Integer" && InputType != "Float" &&
@@ -138,6 +162,7 @@ namespace PluginBlurInput
                 }
             }
 
+
             if (!isInitialized)
             {
                 TextBuffer = defaultValue.Length > CharacterLimit && CharacterLimit > 0
@@ -156,13 +181,64 @@ namespace PluginBlurInput
             }
 
             UpdateText();
+
+            if (!string.IsNullOrEmpty(rootConfigPath) && !string.IsNullOrEmpty(currentFile))
+            {
+                TargetWindowTitle = $"{rootConfigPath}{currentFile}";
+            }
+            else
+            {
+                api.Log(API.LogType.Error, "WindowTitleMatch.dll: Invalid ROOTCONFIGPATH or CURRENTFILE values.");
+            }
+
+
         }
+
+        //=================================================================================================================================//
+        //                                                    Get Window Title                                                             //
+        //=================================================================================================================================//
+
+        private string GetForegroundWindowTitle()
+        {
+            IntPtr hWnd = GetForegroundWindow();
+            if (hWnd == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            int length = GetWindowTextLength(hWnd);
+            if (length == 0)
+            {
+                return null;
+            }
+
+            StringBuilder windowText = new StringBuilder(length + 1);
+            GetWindowText(hWnd, windowText, windowText.Capacity);
+            return windowText.ToString();
+        }
+
+
 
         //=================================================================================================================================//
         //                                                     Update                                                                      //
         //=================================================================================================================================//
         internal void Update()
         {
+            string foregroundTitle = GetForegroundWindowTitle();
+            if (!string.IsNullOrEmpty(foregroundTitle) && TargetWindowTitle.Equals(foregroundTitle, StringComparison.OrdinalIgnoreCase))
+            {
+               // Api.Execute($"!Log  \"Skin In Focus\"");
+            }
+            else
+            {
+                if (UnFocusDismiss == 1 && IsActive)
+                {
+                    //Api.Execute($"!Log  \"Skin In UnFocus\"");
+                   ESCHandler();
+                   Api.Execute(DismissAction);
+                }
+            }
+
             if (!IsActive || string.IsNullOrEmpty(MeterName))
                 return;
 
@@ -295,21 +371,24 @@ namespace PluginBlurInput
                     return;
 
                 case 27:
-                    Api.Execute(OnESCAction);
-                    Stop();
+                    ESCHandler();
                     return;
+
 
                 case 13:
                     if (IsMultiline && !ctrlPressed)
                     {
-                        InsertText("\n");
+                        InsertText("#CRLF#");
                     }
                     else
                     {
-                        UpdateMeasure();
+                        // UpdateMeasure();
+                       // Api.Execute(OnEnterAction);
+                       // ValidateAndSubmitText();
                         Api.Execute(OnEnterAction);
-                        ValidateAndSubmitText();
                         Stop();
+                        ValidateAndSubmitText();
+                        // Api.Execute(OnEnterAction);
                     }
                     return;
 
@@ -379,6 +458,8 @@ namespace PluginBlurInput
             return '\0';
         }
 
+     
+
         //=================================================================================================================================//
         //                                                      ValidInputs                                                                //
         //=================================================================================================================================//
@@ -401,76 +482,100 @@ namespace PluginBlurInput
 
         private void ValidateAndSubmitText()
         {
-
-            if (string.IsNullOrEmpty(TextBuffer))
+            try
             {
-                isTextCleared = true;
-                return;
+                if (string.IsNullOrEmpty(TextBuffer))
+                {
+                    isTextCleared = true;
+                    return;
+                }
+
+                isTextCleared = false;
+
+                switch (InputType)
+                {
+                    case "Integer":
+                        if (!int.TryParse(TextBuffer, out _))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Float":
+                        if (!float.TryParse(TextBuffer, out _))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Letters":
+                        if (!IsAllLetters(TextBuffer))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Alphanumeric":
+                        if (!IsAllAlphanumeric(TextBuffer))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Hexadecimal":
+                        if (!IsHexadecimal(TextBuffer))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Email":
+                        if (!IsValidEmail(TextBuffer))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    case "Custom":
+                        if (!IsValidCustom(TextBuffer))
+                        {
+                            ResetToDefault();
+                        }
+                        break;
+
+                    default:
+                       // Api.Log(API.LogType.Warning, $"Unknown InputType '{InputType}'. Defaulting to 'String'.");
+                        InputType = "String";
+                        break;
+                }
+
+                UpdateText();
             }
-
-            isTextCleared = false;
-
-            switch (InputType)
+            catch (Exception ex)
             {
-                case "Integer":
-                    if (!int.TryParse(TextBuffer, out _))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Float":
-                    if (!float.TryParse(TextBuffer, out _))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Letters":
-                    if (!IsAllLetters(TextBuffer))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Alphanumeric":
-                    if (!IsAllAlphanumeric(TextBuffer))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Hexadecimal":
-                    if (!IsHexadecimal(TextBuffer))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Email":
-                    if (!IsValidEmail(TextBuffer))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
-
-                case "Custom":
-                    if (!IsValidCustom(TextBuffer))
-                    {
-                        ResetToDefault();
-                    }
-                    break;
+                Api.Log(API.LogType.Error, $"An error occurred in ValidateAndSubmitText: {ex.Message}");
             }
-
-            UpdateText();
         }
+
+
         private void ResetToDefault()
         {
             if (!isTextCleared)
             {
-                TextBuffer = Api.ReadString("DefaultValue", "");
+                string defaultValue = Api.ReadString("DefaultValue", "");
+                if (!string.IsNullOrEmpty(defaultValue))
+                {
+                    TextBuffer = defaultValue;
+                }
+                else
+                {
+                    Api.Log(API.LogType.Warning, "DefaultValue is empty. Clearing TextBuffer.");
+                    TextBuffer = string.Empty;
+                }
             }
         }
+
+
         private bool IsAllLetters(string input)
         {
             foreach (char c in input)
@@ -500,13 +605,26 @@ namespace PluginBlurInput
         }
         private bool IsValidEmail(string input)
         {
-            return input.Contains("@")
-                && input.Contains(".")
-                && !input.StartsWith("@")
-                && !input.EndsWith(".");
+            try
+            {
+                var emailRegex = new System.Text.RegularExpressions.Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+                return emailRegex.IsMatch(input);
+            }
+            catch (Exception ex)
+            {
+                Api.Log(API.LogType.Error, $"Email validation failed: {ex.Message}");
+                return false;
+            }
         }
+
         private bool IsValidCustom(string input)
         {
+            if (AllowedCharacters == null)
+            {
+                Api.Log(API.LogType.Error, "AllowedCharacters is not initialized.");
+                return false;
+            }
+
             foreach (char c in input)
             {
                 if (!AllowedCharacters.Contains(c))
@@ -515,30 +633,44 @@ namespace PluginBlurInput
             return true;
         }
 
-        internal void ConvertTextBufferToSingleLine()
-        {
-            if (!string.IsNullOrEmpty(TextBuffer))
-            {
-                if(FormatMultiline == 1)
-                {
-                    TextBuffer = TextBuffer.Replace("\r\n", " ").Replace("\n", " ");
-                }
-            }
-        }
-
 
         //=================================================================================================================================//
         //                                                      KeyBoard Functions                                                         //
         //=================================================================================================================================//
 
+        public void ESCHandler()
+        {
+            if (!IsActive) return;
+
+            //  Api.Execute($"!Log  \"Active\"");
+            Api.Execute(OnESCAction);
+
+            IsActive = false;
+            hasResetOnce = false;
+
+            CursorPosition = 0;
+            UndoStack.Clear();
+            RedoStack.Clear();
+            updateTimer.Stop();
+
+
+            if (!string.IsNullOrEmpty(MeterName))
+            {
+                Api.Execute($"!SetOption {MeterName} Text \"{defaultValue}\"");
+                Api.Execute($"!UpdateMeter {MeterName}");
+                Api.Execute($"!Redraw");
+            }
+
+        }
+
         private void HandleCtrlEnter()
         {
-            ConvertTextBufferToSingleLine();
-            UpdateMeasure();
+            TextBuffer = TextBuffer.Replace("\r\n", "#CRLF#").Replace("\n", "#CRLF#");
+          //  UpdateMeasure();
             Api.Execute(OnEnterAction);
             Stop();
         }
-     
+
         internal void CopyToClipboard()
         {
             if (!string.IsNullOrEmpty(TextBuffer))
@@ -625,21 +757,11 @@ namespace PluginBlurInput
             }
 
             Api.Execute($"!SetOption {MeterName} Text \"{displayText}\"");
-            Api.Execute($"!UpdateMeter *");          
+            Api.Execute($"!UpdateMeter *");
             Api.Execute($"!Redraw");
         }
 
-        private void UpdateMeasure()
-        {
-            if (!IsActive || string.IsNullOrEmpty(MeasureName) || string.IsNullOrEmpty(MeterName))
-                return;
-
-            Api.Execute($"!SetOption {MeterName} Text \"{TextBuffer}\"");
-            Api.Execute($"!SetOption {MeasureName} DefaultValue \"{TextBuffer}\"");
-            Api.Execute($"!UpdateMeter {MeterName}");
-            Api.Execute($"!UpdateMeasure {MeasureName}");
-          
-        }
+    
 
         //=================================================================================================================================//
         //                                                     Bangs Functions                                                             //
@@ -655,36 +777,73 @@ namespace PluginBlurInput
         }
         internal void Start()
         {
+            if (IsActive)
+            {
+                Api.Log(API.LogType.Debug, "Plugin is already running. Start operation skipped.");
+                return;
+            }
+
             IsActive = true;
             CursorPosition = TextBuffer.Length;
             UpdateText();
             updateTimer.Start();
+
+            if (!hasResetOnce)
+            {
+                hasResetOnce = true;
+                resetTimer = new System.Timers.Timer(5);
+                resetTimer.Elapsed += (sender, e) =>
+                {
+                    ResetToDefaultValue();
+                    resetTimer.Stop();
+                };
+                resetTimer.AutoReset = false;
+                resetTimer.Start();
+            }
+
         }
+
+        private void ResetToDefaultValue()
+        {
+            TextBuffer = defaultValue;
+            CursorPosition = TextBuffer.Length;
+            UndoStack.Clear();
+            RedoStack.Clear();
+
+            UpdateText();
+
+        }
+
+
         internal void ShowContextForm()
         {
             if (!IsActive)
                 return;
-
 
             ContextForm contextForm = new ContextForm(this);
             contextForm.ShowDialog();
         }
         internal void Stop()
         {
+            if (!IsActive)
+                return;
+
             IsActive = false;
-            TextBuffer = defaultValue;
+            hasResetOnce = false;
+         //   TextBuffer = defaultValue;
             CursorPosition = 0;
             UndoStack.Clear();
             RedoStack.Clear();
             updateTimer.Stop();
-            UpdateMeasure();
+          //  UpdateMeasure();
 
             if (!string.IsNullOrEmpty(MeterName))
             {
-                Api.Execute($"!SetOption {MeterName} Text \"{defaultValue}\"");
-                Api.Execute($"!UpdateMeter *");
+                Api.Execute($"!SetOption {MeterName} Text \"{TextBuffer}\"");
+                Api.Execute($"!UpdateMeter {MeterName}");
                 Api.Execute($"!Redraw");
             }
+          //  TextBuffer = defaultValue;
         }
     }
     //=================================================================================================================================//
@@ -706,7 +865,7 @@ namespace PluginBlurInput
             Measure measure = (Measure)GCHandle.FromIntPtr(data).Target;
             measure.Stop();
             GCHandle.FromIntPtr(data).Free();
-            if (stringBuffer != IntPtr.Zero) 
+            if (stringBuffer != IntPtr.Zero)
             {
                 Marshal.FreeHGlobal(stringBuffer);
                 stringBuffer = IntPtr.Zero;
