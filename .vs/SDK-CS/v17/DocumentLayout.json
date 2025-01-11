@@ -5,6 +5,10 @@
     {
       "AbsoluteMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|d:\\github\\blurinput\\blurinput\\blurinput.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:blurinput\\blurinput.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|d:\\github\\blurinput\\blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -14,11 +18,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 1,
+          "SelectedChildIndex": 2,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "AssemblyInfo.cs",
+              "DocumentMoniker": "D:\\GitHub\\BlurInput\\BlurInput\\AssemblyInfo.cs",
+              "RelativeDocumentMoniker": "BlurInput\\AssemblyInfo.cs",
+              "ToolTip": "D:\\GitHub\\BlurInput\\BlurInput\\AssemblyInfo.cs",
+              "RelativeToolTip": "BlurInput\\AssemblyInfo.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-11T08:22:14.689Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -28,7 +45,7 @@
               "RelativeDocumentMoniker": "BlurInput\\BlurInput.cs",
               "ToolTip": "D:\\GitHub\\BlurInput\\BlurInput\\BlurInput.cs",
               "RelativeToolTip": "BlurInput\\BlurInput.cs",
-              "ViewState": "AgIAABMCAAAA1szMzMwuwCICAAAZAAAAAAAAAA==",
+              "ViewState": "AgIAAM8AAAAAiGZmZmYewNsAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-09T11:44:08.152Z",
               "EditorCaption": ""
