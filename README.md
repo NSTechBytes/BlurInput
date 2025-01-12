@@ -50,6 +50,7 @@ Measure=Plugin
 Plugin=BlurInput
 MeterName=MeterInputField
 Cursor=|
+FormatMultiline=1  ;This will format the multiline text into one line.
 Password= (0,1)
 Multiline= (0,1) ;When Using Multiline Use CTRL+ENTER for submit Text otherwise use only ENTER.
 Limit= (0 for not Limit fix)
