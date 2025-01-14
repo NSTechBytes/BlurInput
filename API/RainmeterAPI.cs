@@ -406,6 +406,10 @@ namespace Rainmeter
             RmLog(this.m_Rm, type, message);
         }
 
+
+
+
+
         /// <summary>
         /// Sends a formatted message to the Rainmeter log
         /// </summary>

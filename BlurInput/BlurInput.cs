@@ -29,18 +29,28 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
+//using System.Windows.Forms.Cursor;
 using Rainmeter;
 using System.Drawing;
 using System.Diagnostics;
 using System.Timers;
+using System.Text.RegularExpressions;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+//using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 
 
 namespace PluginBlurInput
 {
+  //  private API api; // Define 'api' as an instance variable
+
     internal class Measure
     {
+
+        public API api; // Define 'api' as an instance variable
+
         public string myName; // To store the measure name
+        public int Disabled; // To store the measure name
         private string MeterName = "";
         private string TextBuffer = "";
         private string OnEnterAction;
@@ -50,6 +60,7 @@ namespace PluginBlurInput
         private Rainmeter.API Api;
         private string defaultValue = "";
         private int FormatMultiline = 0;
+    
 
         private string DismissAction;
 
@@ -78,7 +89,11 @@ namespace PluginBlurInput
         private System.Timers.Timer resetTimer;
         private bool hasResetOnce = false;
 
-       
+        private string substituteRule = "";
+        private int useRegex = 0;
+
+        private int MeterX, MeterY, MeterWidth, MeterHeight;
+        private int SkinX, SkinY;
 
         public string GetUserInput()
         {
@@ -112,23 +127,25 @@ namespace PluginBlurInput
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int GetWindowTextLength(IntPtr hWnd);
 
-
         //=================================================================================================================================//
         //                                                      Reload                                                                     //
         //=================================================================================================================================//
 
         internal void Reload(Rainmeter.API api, ref double maxValue)
         {
+          
             Api = api;
+
+            TextBuffer = ApplySubstitution(TextBuffer, substituteRule, useRegex);
 
             updateTimer = new System.Timers.Timer(UpdateInterval);
             updateTimer.Elapsed += (sender, e) => UpdateTest();
             updateTimer.AutoReset = true;
 
-
             MeterName = api.ReadString("MeterName", "");
             FormatMultiline = api.ReadInt("FormatMultiline", 0);
-        
+            Disabled = api.ReadInt("Disabled", 0);
+
             Cursor = api.ReadString("Cursor", "|");
             IsPassword = api.ReadInt("Password", 0) == 1;
             IsMultiline = api.ReadInt("Multiline", 0) == 1;
@@ -141,8 +158,22 @@ namespace PluginBlurInput
 
             UnFocusDismiss = api.ReadInt("SkinUnFocusDismiss", 0);
 
-            string rootConfigPath = api.ReplaceVariables("#ROOTCONFIGPATH#");
+           // private string MeterName = "";
+            string rootConfigPath = api.ReplaceVariables("#CURRENTPATH#");
             string currentFile = api.ReplaceVariables("#CURRENTFILE#");
+
+               MeterX =  api.ReadInt("MeterX", 0);;
+              MeterY = api.ReadInt("MeterY", 0);
+            MeterWidth = api.ReadInt("MeterW",0);
+
+            MeterHeight = api.ReadInt("MeterH",0);
+
+
+            SkinX = int.Parse(api.ReplaceVariables("#CURRENTCONFIGX#"));
+            SkinY = int.Parse(api.ReplaceVariables("#CURRENTCONFIGY#"));
+
+            useRegex = api.ReadInt("RegExpSubstitute", 0);
+            substituteRule = api.ReadString("Substitute", "");
 
             InputType = api.ReadString("InputType", "String").Trim();
             if (InputType != "String" && InputType != "Integer" && InputType != "Float" &&
@@ -190,32 +221,96 @@ namespace PluginBlurInput
             {
                 api.Log(API.LogType.Error, "WindowTitleMatch.dll: Invalid ROOTCONFIGPATH or CURRENTFILE values.");
             }
+           // api.Log(API.LogType.Notice,$"Width {MeterWidth}.");
 
-
-            UpdateText();
+            // UpdateText();
         }
 
 
+
+
+
+
+
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Update Helper to get ride from the default Rainmeter Section.
         // Due to the reasonable delay listner keys.
         // Not Find any proper solution. So Find this hacky Solution.
 
         internal void UpdateTest()
         {
+           
             Api.Execute($"!UpdateMeasure  \"{myName}\"");
+        }
+
+
+
+
+
+
+
+
+        private Point GetMousePosition()
+        {
+            // Use fully qualified name to avoid conflicts
+            return System.Windows.Forms.Cursor.Position;
+        }
+
+        private bool IsMouseInsideMeter(Point mousePosition)
+        {
+            // Add SkinX and SkinY to meter coordinates to get the global position
+            int meterGlobalX = MeterX + SkinX;
+            int meterGlobalY = MeterY + SkinY;
+
+            // Check if the mouse is within the meter's boundaries
+            return mousePosition.X >= meterGlobalX &&
+                   mousePosition.X <= meterGlobalX + MeterWidth &&
+                   mousePosition.Y >= meterGlobalY &&
+                   mousePosition.Y <= meterGlobalY + MeterHeight;
         }
         //=================================================================================================================================//
         //                                                     Update                                                                      //
         //=================================================================================================================================//
         internal void Update()
         {
+            if (Control.MouseButtons == MouseButtons.Left || Control.MouseButtons == MouseButtons.Right)
+            {
+
+
+                // Get the mouse position
+                Point mousePosition = GetMousePosition();
+
+                // Check if the mouse is inside or outside the meter
+                if (IsMouseInsideMeter(mousePosition))
+                {
+                    Api.Log(API.LogType.Debug, "Mouse clicked inside the meter.");
+
+                    Api.Execute($"!Log  \"Skin In Focus\"");
+                }
+                else
+                {
+                    if (UnFocusDismiss == 1 && IsActive)
+                    {
+                        //Api.Execute($"!Log  \"Skin In UnFocus\"");
+                        ESCHandler();
+                        Api.Execute(DismissAction);
+                    }
+
+                    Api.Log(API.LogType.Debug, "Mouse clicked outside the meter.");
+
+                    Api.Execute($"!Log  \"Skin In UnFocus\"");
+                }
+            }
+
+
 
             bool ctrlPressed = (GetAsyncKeyState(17) & 0x8000) != 0;
             bool shiftPressed = (GetAsyncKeyState(16) & 0x8000) != 0;
             CapsLockActive = (GetKeyState(20) & 0x0001) != 0;
 
 
-            string foregroundTitle = GetForegroundWindowTitle();
+          /*  string foregroundTitle = GetForegroundWindowTitle();
             if (!string.IsNullOrEmpty(foregroundTitle) && TargetWindowTitle.Equals(foregroundTitle, StringComparison.OrdinalIgnoreCase))
             {
                //  Api.Execute($"!Log  \"Skin In Focus\"");
@@ -228,7 +323,7 @@ namespace PluginBlurInput
                     ESCHandler();
                     Api.Execute(DismissAction);
                 }
-            }
+            }*/
 
 
             if (!IsActive || string.IsNullOrEmpty(MeterName))
@@ -259,6 +354,7 @@ namespace PluginBlurInput
                 }
             }
         }
+
         //=================================================================================================================================//
         //                                                      Context                                                                   //
         //=================================================================================================================================//
@@ -300,9 +396,9 @@ namespace PluginBlurInput
                 Controls.Add(clearButton);
             }
 
-            private Button CreateStyledButton(string text, Point location)
+            private System.Windows.Forms.Button CreateStyledButton(string text, Point location)
             {
-                return new Button
+                return new System.Windows.Forms.Button
                 {
                     Text = text,
                     Font = new Font("Segoe UI", 10, FontStyle.Bold),
@@ -315,12 +411,13 @@ namespace PluginBlurInput
                     Cursor = Cursors.Hand
                 };
             }
+
         }
         //=================================================================================================================================//
         //                                                    Get Window Title                                                             //
         //=================================================================================================================================//
 
-        private string GetForegroundWindowTitle()
+     /*   private string GetForegroundWindowTitle()
         {
             IntPtr hWnd = GetForegroundWindow();
             if (hWnd == IntPtr.Zero)
@@ -337,7 +434,7 @@ namespace PluginBlurInput
             StringBuilder windowText = new StringBuilder(length + 1);
             GetWindowText(hWnd, windowText, windowText.Capacity);
             return windowText.ToString();
-        }
+        }*/
 
         //=================================================================================================================================//
         //                                                      KeyBoardControl                                                            //
@@ -444,6 +541,8 @@ namespace PluginBlurInput
 
         private char MapKeyToCharacterDynamic(int keyCode)
         {
+
+          
             StringBuilder result = new StringBuilder(2);
 
             byte[] keyboardState = new byte[256];
@@ -467,6 +566,8 @@ namespace PluginBlurInput
         //=================================================================================================================================//
         private bool IsValidInput(char keyChar)
         {
+         
+
             switch (InputType)
             {
                 case "String":
@@ -484,6 +585,7 @@ namespace PluginBlurInput
 
         private void ValidateAndSubmitText()
         {
+           
 
             if (string.IsNullOrEmpty(TextBuffer))
             {
@@ -549,6 +651,8 @@ namespace PluginBlurInput
         }
         private void ResetToDefault()
         {
+
+            if (Disabled == 1) return;
             if (!isTextCleared)
             {
                 TextBuffer = Api.ReadString("DefaultValue", "");
@@ -618,13 +722,14 @@ namespace PluginBlurInput
         // for the unfocus skin.
         public void ESCHandler()
         {
+
             if (!IsActive) return;
 
-            //  Api.Execute($"!Log  \"Active\"");
-            Api.Execute(OnESCAction);
-
+            // Api.Execute($"!Log  \"Active\"");
             IsActive = false;
             hasResetOnce = false;
+            Api.Execute(OnESCAction);
+
             TextBuffer = defaultValue;
 
             CursorPosition = 0;
@@ -632,14 +737,13 @@ namespace PluginBlurInput
             RedoStack.Clear();
             updateTimer.Stop();
 
-
             if (!string.IsNullOrEmpty(MeterName))
             {
-                Api.Execute($"!SetOption {MeterName} Text \"{defaultValue}\"");
-                Api.Execute($"!UpdateMeter {MeterName}");
+                Api.Execute($"!SetOption  \"{MeterName}\" Text \"{defaultValue}\" ");
+                Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
                 Api.Execute($"!Redraw");
             }
-
+            Api.Execute(OnESCAction);
         }
         private void HandleCtrlEnter()
         {
@@ -710,6 +814,8 @@ namespace PluginBlurInput
 
         private void InsertText(string text)
         {
+
+          
             if (string.IsNullOrEmpty(text)) return;
             if (CharacterLimit > 0 && TextBuffer.Length + text.Length > CharacterLimit)
             {
@@ -723,10 +829,31 @@ namespace PluginBlurInput
             if (!IsActive || string.IsNullOrEmpty(MeterName))
                 return;
 
+      
+            CursorPosition = Math.Max(0, Math.Min(CursorPosition, TextBuffer.Length));
+
+          
             string displayText = IsPassword
                 ? new string('*', TextBuffer.Length).Insert(CursorPosition, Cursor)
                 : TextBuffer.Insert(CursorPosition, Cursor);
 
+            
+            string substituteRule = Api.ReadString("Substitute", "");
+            if (!string.IsNullOrEmpty(substituteRule))
+            {
+                int originalLength = displayText.Length; 
+                displayText = ApplySubstitution(displayText, substituteRule, useRegex);
+
+                
+                int newLength = displayText.Length;
+                if (newLength != originalLength)
+                {
+                    int change = newLength - originalLength;
+                    CursorPosition = Math.Max(0, Math.Min(CursorPosition + change, newLength));
+                }
+            }
+
+            
             if (Width > 0 && displayText.Length > Width)
             {
                 int startIndex = Math.Max(0, CursorPosition - Width / 2);
@@ -734,9 +861,67 @@ namespace PluginBlurInput
                 displayText = displayText.Substring(startIndex, Width);
             }
 
-            Api.Execute($"!SetOption {MeterName} Text \"{displayText}\"");
-            Api.Execute($"!UpdateMeter *");
-            Api.Execute($"!Redraw");
+            Api.Execute($"!SetOption  \"{MeterName}\" Text \"{displayText}\"");
+            Api.Execute($"!UpdateMeter \"{MeterName}\"");
+            Api.Execute("!Redraw");
+        }
+
+
+        private string ApplySubstitution(string text, string substituteRule, int useRegex = 1)
+        {
+            if (string.IsNullOrEmpty(substituteRule))
+                return text;
+
+            string[] rules = substituteRule.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string rule in rules)
+            {
+               
+                if (TryParseRule(rule, out string pattern, out string replacement))
+                {
+                    if (string.IsNullOrEmpty(pattern))
+                    {
+                        Api.Log(API.LogType.Warning, $"Skipping substitution rule with empty pattern: {rule}");
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (useRegex==1)
+                        {
+                          
+                            Regex.Match("", pattern);
+                            text = Regex.Replace(text, pattern, replacement);
+                        }
+                        else
+                        {
+                            text = text.Replace(pattern, replacement);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Api.Log(API.LogType.Error, $"Failed to apply rule: {rule}. {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Api.Log(API.LogType.Warning, $"Invalid rule format: {rule}");
+                }
+            }
+
+            return text;
+        }
+
+        private bool TryParseRule(string rule, out string pattern, out string replacement)
+        {
+            string[] parts = rule.Split(new[] { "\":\"", "\':'", "'\":\"", "'\':'" }, StringSplitOptions.None);
+            if (parts.Length == 2)
+            {
+                pattern = parts[0].Trim('\"', '\'');
+                replacement = parts[1].Trim('\"', '\'');
+                return true;
+            }
+            pattern = replacement = null;
+            return false;
         }
 
         // This handler is use to update the text and measure dynamically.
@@ -744,13 +929,14 @@ namespace PluginBlurInput
 
         private void UpdateMeasure()
         {
+           
             if (!IsActive || string.IsNullOrEmpty(MeterName))
                 return;
 
-            Api.Execute($"!SetOption {MeterName} Text \"{TextBuffer}\"");
-            Api.Execute($"!SetOption {myName} DefaultValue \"{TextBuffer}\"");
-            Api.Execute($"!UpdateMeter {MeterName}");
-            Api.Execute($"!UpdateMeasure {myName}");
+            Api.Execute($"!SetOption  \"{MeterName}\" Text \"{TextBuffer}\" ");
+            Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"{TextBuffer}\" ");
+            Api.Execute($"!UpdateMeter   \"{MeterName}\" ");
+            Api.Execute($"!UpdateMeasure  \"{myName}\" ");
           //Api.Execute($"!Log \"{myName}\"");
 
         }
@@ -768,8 +954,19 @@ namespace PluginBlurInput
             UpdateText();
         }
 
+        internal void GetPos()
+        {
+            Api.Execute($"!SetOption  \"{myName}\" MeterX \"[{MeterName}:X]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterY \"[{MeterName}:Y]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterW \"[{MeterName}:W]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterH \"[{MeterName}:H]\" ");
+            Api.Execute($"!UpdateMeasure  \"{myName}\"");
+        }
+
         internal void Start()
         {
+            if (Disabled == 1) return;
+
             if (IsActive)
             {
                 Api.Log(API.LogType.Debug, "Plugin is already running. Start operation skipped.");
@@ -778,10 +975,10 @@ namespace PluginBlurInput
 
             IsActive = true;
             hasResetOnce = false;
+            GetPos();
             CursorPosition = TextBuffer.Length;
             updateTimer.Start();
-
-            Api.Execute($"!Log  \"{TextBuffer}\"");
+         //Api.Execute($"!Log  \"{TextBuffer}\"");
 
 
             if (!hasResetOnce)
@@ -789,7 +986,7 @@ namespace PluginBlurInput
                 hasResetOnce = true;
                 resetTimer = new System.Timers.Timer(50);
                 resetTimer.Elapsed += (sender, e) =>
-                {
+                { 
                     ResetToDefaultValue();
                     resetTimer.Stop();
                 };
@@ -827,20 +1024,22 @@ namespace PluginBlurInput
 
             IsActive = false;
             hasResetOnce = false;
-         
+
             //TextBuffer = defaultValue;
             CursorPosition = 0;
             UndoStack.Clear();
             RedoStack.Clear();
             updateTimer.Stop();
-            //  UpdateMeasure();
+            updateTimer.Stop();
+            //UpdateMeasure();
 
-            if (!string.IsNullOrEmpty(MeterName))
-            {
-                Api.Execute($"!SetOption {MeterName} Text \"{TextBuffer}\"");
-                Api.Execute($"!UpdateMeter {MeterName}");
-                Api.Execute($"!Redraw");
-            }
+            /* if (!string.IsNullOrEmpty(MeterName))
+             {
+                 Api.Execute($"!SetOption  \"{MeterName}\" Text \"{TextBuffer}\" ");
+                 Api.Execute($"!UpdateMeter   \"{MeterName}\" ");
+                 Api.Execute($"!Redraw");
+             }*/
+
             //  TextBuffer = defaultValue;
         }
     }
@@ -897,7 +1096,7 @@ namespace PluginBlurInput
                 case "start":
                     measure.Start();
                     break;
-
+              
                 case "stop":
                     measure.Stop();
                     break;
@@ -935,6 +1134,16 @@ namespace PluginBlurInput
                     break;
             }
         }
+
+      /*  // New Function: GetWidth
+        [DllExport]
+        public static double GetWidth(IntPtr data)
+        {
+            var measure = (Measure)GCHandle.FromIntPtr(data).Target;
+            return measure.api.GetMeterWidth();
+        }*/
+
+
 
 
         [DllExport]

@@ -7,11 +7,12 @@
       "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:blurinput\\blurinput.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|D:\\GitHub\\BlurInput\\blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|D:\\GitHub\\BlurInput\\api\\rainmeterapi.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:api\\rainmeterapi.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{00000000-0000-0000-0000-000000000000}|\u003CSolution\u003E|BlurInput||{04B8AB82-A572-4FEF-95CE-5222444B6B64}|"
+      "AbsoluteMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|D:\\GitHub\\BlurInput\\blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{D31F73ED-3978-44FA-B599-49584BA30D3A}|BlurInput\\BlurInput.csproj|solutionrelative:blurinput\\assemblyinfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,26 +31,26 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "BlurInput",
-              "DocumentMoniker": "D:\\GitHub\\BlurInput\\BlurInput\\BlurInput.csproj",
-              "RelativeDocumentMoniker": "BlurInput\\BlurInput.csproj",
-              "ToolTip": "D:\\GitHub\\BlurInput\\BlurInput\\BlurInput.csproj",
-              "RelativeToolTip": "BlurInput\\BlurInput.csproj",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-01-12T05:28:07.437Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
               "Title": "AssemblyInfo.cs",
               "DocumentMoniker": "D:\\GitHub\\BlurInput\\BlurInput\\AssemblyInfo.cs",
               "RelativeDocumentMoniker": "BlurInput\\AssemblyInfo.cs",
               "ToolTip": "D:\\GitHub\\BlurInput\\BlurInput\\AssemblyInfo.cs",
               "RelativeToolTip": "BlurInput\\AssemblyInfo.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAfAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-01-11T14:40:00.99Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-01-14T03:02:20.939Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "RainmeterAPI.cs",
+              "DocumentMoniker": "D:\\GitHub\\BlurInput\\API\\RainmeterAPI.cs",
+              "RelativeDocumentMoniker": "API\\RainmeterAPI.cs",
+              "ToolTip": "D:\\GitHub\\BlurInput\\API\\RainmeterAPI.cs",
+              "RelativeToolTip": "API\\RainmeterAPI.cs",
+              "ViewState": "AgIAAEIAAAAAsGZmZmb2v1kAAAAWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-14T02:27:33.252Z"
             },
             {
               "$type": "Document",
@@ -59,7 +60,7 @@
               "RelativeDocumentMoniker": "BlurInput\\BlurInput.cs",
               "ToolTip": "D:\\GitHub\\BlurInput\\BlurInput\\BlurInput.cs",
               "RelativeToolTip": "BlurInput\\BlurInput.cs",
-              "ViewState": "AgIAAAkDAACABM3MzMwcwBsDAAAtAAAAAAAAAA==",
+              "ViewState": "AgIAABABAACA/v////8lwCYBAABEAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-09T11:44:08.152Z",
               "EditorCaption": ""
