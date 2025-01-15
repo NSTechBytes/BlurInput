@@ -1,29 +1,4 @@
-﻿/*=================================================================================================================================================//
-[Rainmeter]
-Update=0
-
-[InputHandler]
-Measure=Plugin
-Plugin=BlurInput
-MeasureName=#CURRENTSECTION#
-MeterName=
-Cursor=|
-Password= (0,1)
-Multiline= (0,1)
-Limit= (0 for not Limit fix)
-Width= (0 for not Width fix)
-FormatMultiline=0
-DefaultValue=
-InputType= (String,Integer,Float,Letters,Alphanumeric,Hexadecimal,Email,Custom) any one
-OnEnterAction=[!Log "Log:[InputHandler]"]
-OnESCAction=[!Log "[InputHandler]"]
-DynamicVariables=1
-==================================================================================================================================================*/
-
-//=================================================================================================================================//
-//                                                   ||||  Main Code  |||||                                                        //
-//=================================================================================================================================//
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -32,8 +7,7 @@ using Rainmeter;
 using System.Drawing;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using System.Linq;
-using static System.Net.Mime.MediaTypeNames;
+
 
 namespace PluginBlurInput
 {
@@ -184,10 +158,6 @@ namespace PluginBlurInput
             }
 
         }
-
-        // Update Helper to get ride from the default Rainmeter Section.
-        // Due to the reasonable delay listner keys.
-        // Not Find any proper solution. So Find this hacky Solution.
 
         internal void UpdateTest()
         {
@@ -609,6 +579,10 @@ namespace PluginBlurInput
             Api.Execute("!Redraw");
         }
 
+
+
+
+
         private string ApplySubstitution(string text, string substituteRule, int useRegex = 1)
         {
 
@@ -634,6 +608,7 @@ namespace PluginBlurInput
 
                             Regex.Match("", pattern);
                             text = Regex.Replace(text, pattern, replacement);
+                           // text = text.Replace(pattern, replacement);
                         }
                         else
                         {
@@ -651,6 +626,7 @@ namespace PluginBlurInput
                  }*/
             }
 
+            text = text.Replace("#CRLF#", "\n");
             return text;
         }
 
@@ -666,6 +642,7 @@ namespace PluginBlurInput
             pattern = replacement = null;
             return false;
         }
+
 
         private void UpdateMeasure()
         {
