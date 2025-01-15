@@ -58,7 +58,10 @@ Width= (0 for not Width fix)
 InputType=String  (String,Integer,Float,Letters,Alphanumeric,Hexadecimal,Email,Custom) any one
 CharacterLimit=50
 DefaultValue=Type here...
-SkinUnFocusDismiss=1
+UnFocusDismiss=1
+ShowErrorForm=1 (If Set to 1.Then On Submit text when the Input Field Contain UnValis Characters then it show Error Form.)
+ForceValidInput=0  (If Set to 1.Then If you set StringType=Integer then other letter would not enter in input field.And Similarly for Letters and Vice Versa.)
+UnValidInputAction=[!Log  "UnValidInput Type" "Debug"] 
 DismissAction=[!Log "Dismiss"]
 OnEnterAction=[!Log "Log:[InputHandler]"]
 OnESCAction=[!Log "[InputHandler]"]

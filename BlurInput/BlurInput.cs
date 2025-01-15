@@ -25,28 +25,23 @@ DynamicVariables=1
 //=================================================================================================================================//
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using Rainmeter;
 using System.Drawing;
 using System.Diagnostics;
-using System.Timers;
 using System.Text.RegularExpressions;
-
-
-
+using System.Linq;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace PluginBlurInput
 {
-   
-
     internal class Measure
     {
-        public API api; 
+        public API api;
         public string myName;
-        public int Disabled; 
+        public int Disabled;
         private string MeterName = "";
         private string TextBuffer = "";
         private string OnEnterAction;
@@ -83,6 +78,7 @@ namespace PluginBlurInput
         private int SkinX, SkinY;
         private bool ContextFocusForm = false;
         private bool ContextFormOpen = false;
+        private string UnValidAction = "";
 
 
         [DllImport("user32.dll")]
@@ -132,7 +128,7 @@ namespace PluginBlurInput
             defaultValue = api.ReadString("DefaultValue", "").Trim();
             Width = api.ReadInt("Width", 0);
             myName = api.GetMeasureName();
-            UnFocusDismiss = api.ReadInt("SkinUnFocusDismiss", 0);
+            UnFocusDismiss = api.ReadInt("UnFocusDismiss", 0);
             string rootConfigPath = api.ReplaceVariables("#CURRENTPATH#");
             string currentFile = api.ReplaceVariables("#CURRENTFILE#");
             MeterX = api.ReadInt("MeterX", 0); ;
@@ -143,8 +139,11 @@ namespace PluginBlurInput
             SkinY = int.Parse(api.ReplaceVariables("#CURRENTCONFIGY#"));
             useRegex = api.ReadInt("RegExpSubstitute", 0);
             substituteRule = api.ReadString("Substitute", "");
-            ShowErrorForm = api.ReadInt("ShowErrorForm", 1);
-            ForceValidInput = api.ReadInt("ForceValidInput", 1);
+            ShowErrorForm = api.ReadInt("ShowErrorForm", 0);
+            ForceValidInput = api.ReadInt("ForceValidInput", 0);
+            UnValidAction = api.ReadString("UnValidInputAction", "");
+
+
 
             InputType = api.ReadString("InputType", "String").Trim();
             if (InputType != "String" && InputType != "Integer" && InputType != "Float" &&
@@ -183,6 +182,7 @@ namespace PluginBlurInput
                 TextBuffer = TextBuffer.Substring(0, CharacterLimit);
                 CursorPosition = Math.Min(CursorPosition, CharacterLimit);
             }
+
         }
 
         // Update Helper to get ride from the default Rainmeter Section.
@@ -191,28 +191,39 @@ namespace PluginBlurInput
 
         internal void UpdateTest()
         {
+            if (!IsActive)
+                return;
+            GetPos();
+        }
 
+        internal void GetPos()
+        {
+            Api.Execute($"!SetOption  \"{myName}\" MeterX \"[{MeterName}:X]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterY \"[{MeterName}:Y]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterW \"[{MeterName}:W]\" ");
+            Api.Execute($"!SetOption  \"{myName}\" MeterH \"[{MeterName}:H]\" ");
             Api.Execute($"!UpdateMeasure  \"{myName}\"");
         }
 
         private Point GetMousePosition()
         {
-          
+
             return System.Windows.Forms.Cursor.Position;
         }
 
         private bool IsMouseInsideMeter(Point mousePosition)
         {
-          
+
             int meterGlobalX = MeterX + SkinX;
             int meterGlobalY = MeterY + SkinY;
 
-           
+
             return mousePosition.X >= meterGlobalX &&
                    mousePosition.X <= meterGlobalX + MeterWidth &&
                    mousePosition.Y >= meterGlobalY &&
                    mousePosition.Y <= meterGlobalY + MeterHeight;
         }
+
         //=================================================================================================================================//
         //                                                     Update                                                                      //
         //=================================================================================================================================//
@@ -228,35 +239,28 @@ namespace PluginBlurInput
 
                 if (IsMouseInsideMeter(mousePosition))
                 {
+
+
                     if (Control.MouseButtons == MouseButtons.Right)
                     {
                         ShowContextForm();
                     }
-                   // Api.Log(API.LogType.Debug, "Mouse clicked inside the meter.");
-
-                        //  Api.Execute($"!Log  \"Skin In Focus\"");
+                    //  Api.Execute($"!Log  \"Meter In Focus\"");
                 }
                 else
                 {
                     if (UnFocusDismiss == 1 && IsActive && ContextFocusForm)
                     {
                         UnFocusDismissHandler();
-                        Api.Execute($"!Log  \"Skin In UnFocus\"");
+                        //Api.Execute($"!Log  \"Meter In UnFocus\"");
 
                     }
-
-                   // Api.Log(API.LogType.Debug, "Mouse clicked outside the meter.");
-
-                   // Api.Execute($"!Log  \"Skin In UnFocus\"");
                 }
             }
 
             bool ctrlPressed = (GetAsyncKeyState(17) & 0x8000) != 0;
             bool shiftPressed = (GetAsyncKeyState(16) & 0x8000) != 0;
             CapsLockActive = (GetKeyState(20) & 0x0001) != 0;
-
-
-
 
             for (int i = 8; i <= 255; i++)
             {
@@ -282,104 +286,6 @@ namespace PluginBlurInput
                 }
             }
         }
-
-        //=================================================================================================================================//
-        //                                                      Context                                                                   //
-        //=================================================================================================================================//
-        public class ContextForm : Form
-        {
-            private readonly Measure _measure;
-
-            public ContextForm(Measure measure)
-            {
-                _measure = measure;
-
-                Text = "BlurInput Menu"; // Optional, doesn't show since the title bar is hidden
-                Size = new Size(200, 350);
-                FormBorderStyle = FormBorderStyle.None; // Remove title bar
-                MaximizeBox = false; // Redundant, but ensures no maximize functionality
-                MinimizeBox = false; // Redundant, but ensures no minimize functionality
-                ControlBox = false; // Ensure no control box
-                ShowInTaskbar = false; // Do not show in taskbar
-                StartPosition = FormStartPosition.Manual; // Allow manual positioning
-                BackColor = Color.FromArgb(30, 30, 30);
-
-                // Get cursor position and set form location
-                var cursorPosition = Cursor.Position;
-                Location = new Point(cursorPosition.X - (Size.Width / 2), cursorPosition.Y);
-
-                // Add buttons
-                var undoButton = CreateStyledButton("Undo", new Point(30, 30), "\uE10E");  // Undo icon
-                var redoButton = CreateStyledButton("Redo", new Point(30, 80), "\uE10D");  // Redo icon
-                var copyButton = CreateStyledButton("Copy", new Point(30, 130), "\uE16F"); // Copy icon
-                var pasteButton = CreateStyledButton("Paste", new Point(30, 180), "\uE16D"); // Paste icon
-                var clearButton = CreateStyledButton("Clear Text", new Point(30, 230), "\uE107"); // Clear icon
-                var cancelButton = CreateStyledButton("Cancel", new Point(30, 280), "\uE10A");  // Cancel icon
-                ;
-
-                undoButton.Click += (s, e) => { _measure.Undo(); Close(); };
-                redoButton.Click += (s, e) => { _measure.Redo(); Close(); };
-                copyButton.Click += (s, e) => { _measure.CopyToClipboard(); Close(); };
-                pasteButton.Click += (s, e) => { _measure.PasteFromClipboard(); Close(); };
-                clearButton.Click += (s, e) => { _measure.ClearText(); Close(); };
-                cancelButton.Click += (s, e) => { Close(); };
-
-
-                Controls.Add(undoButton);
-                Controls.Add(redoButton);
-                Controls.Add(copyButton);
-                Controls.Add(pasteButton);
-                Controls.Add(clearButton);
-                Controls.Add(cancelButton);
-            }
-
-            private System.Windows.Forms.Button CreateStyledButton(string text, Point location, string iconUnicode = null)
-            {
-                var button = new System.Windows.Forms.Button
-                {
-                    Text = string.IsNullOrEmpty(iconUnicode) ? text : $"{iconUnicode} {text}",
-                    Font = new Font("Segoe UI Symbol", 10, FontStyle.Bold),
-                    ForeColor = Color.White,
-                    BackColor = Color.FromArgb(70, 70, 70),
-                    FlatStyle = FlatStyle.Flat,
-                    FlatAppearance = { BorderSize = 0 },
-                    Location = location,
-                    Size = new Size(150, 40),
-                    Cursor = Cursors.Hand,
-                    TextAlign = ContentAlignment.MiddleCenter // Align the text and icon
-                };
-
-                return button;
-            }
-
-
-            protected override void OnFormClosing(FormClosingEventArgs e)
-            {
-                base.OnFormClosing(e);
-                _measure.ContextFocusForm = true;
-                _measure.ContextFormOpen = false;
-            }
-
-            protected override void OnDeactivate(EventArgs e)
-            {
-                base.OnDeactivate(e);
-
-                // Check if the mouse is outside the form's bounds
-                var mousePos = Cursor.Position;
-                var formRect = new Rectangle(Location, Size);
-
-                if (!formRect.Contains(mousePos))
-                {
-                    _measure.ContextFocusForm = true;
-                    _measure.ContextFormOpen = false;
-                    Close(); // Close the form if the mouse is outside the form
-                }
-            }
-
-            public bool ContextFocus { get; private set; }
-        }
-
-
         //=================================================================================================================================//
         //                                                      KeyBoardControl                                                            //
         //=================================================================================================================================//
@@ -427,6 +333,7 @@ namespace PluginBlurInput
                     if (IsMultiline && !ctrlPressed)
                     {
                         InsertText("\n");
+                        Api.Execute($"!Log  \"Meter In Focus\"");
                     }
                     else
                     {
@@ -504,236 +411,9 @@ namespace PluginBlurInput
         }
 
         //=================================================================================================================================//
-        //                                                      ValidInputs                                                                //
-        //=================================================================================================================================//
-        private bool IsValidInput(char keyChar)
-        {
-            if (ForceValidInput == 1)
-            {
-                switch (InputType)
-                {
-                    case "String":
-                        return true;
-                    case "Integer":
-                        return char.IsDigit(keyChar) || (keyChar == '-' && CursorPosition == 0);
-                    case "Letters":
-                        return char.IsLetter(keyChar);
-                    case "Default":
-                        return true;
-                    default:
-                        return true;
-                }
-            }
-            else
-            {
-                return true;
-            }
-
-        }
-
-        public class ErrorForm : Form
-        {
-            private Label errorLabel;
-            private Button closeButton;
-
-            public ErrorForm(string errorMessage)
-            {
-
-                this.Text = "Error";
-                this.Size = new Size(400, 250);
-                this.StartPosition = FormStartPosition.CenterScreen;
-                this.FormBorderStyle = FormBorderStyle.FixedDialog;
-                this.ControlBox = false;
-                this.BackColor = Color.FromArgb(40, 40, 40);
-                this.ForeColor = Color.White;
-
-
-                errorLabel = new Label();
-                errorLabel.Text = errorMessage;
-                errorLabel.Font = new Font("Segoe UI", 12, FontStyle.Regular);
-                errorLabel.ForeColor = Color.White;
-                errorLabel.Location = new Point(20, 30);
-                errorLabel.Size = new Size(360, 120);
-                errorLabel.TextAlign = ContentAlignment.MiddleCenter;
-                errorLabel.AutoSize = false;
-
-
-                closeButton = new Button();
-                closeButton.Text = "Close";
-                closeButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-                closeButton.BackColor = Color.FromArgb(75, 75, 75);
-                closeButton.ForeColor = Color.White;
-                closeButton.FlatStyle = FlatStyle.Flat;
-                closeButton.FlatAppearance.BorderSize = 0;
-                closeButton.Location = new Point(150, 160);
-                closeButton.Size = new Size(100, 40);
-                closeButton.Click += (sender, e) => { this.Close(); };
-                closeButton.MouseEnter += (sender, e) => closeButton.BackColor = Color.FromArgb(100, 100, 100);
-                closeButton.MouseLeave += (sender, e) => closeButton.BackColor = Color.FromArgb(75, 75, 75);
-
-
-                this.Controls.Add(errorLabel);
-                this.Controls.Add(closeButton);
-            }
-
-
-            protected override void WndProc(ref Message m)
-            {
-
-                if (m.Msg == 0xA3)
-                {
-
-                    return;
-                }
-
-
-                base.WndProc(ref m);
-            }
-        }
-
-
-        private bool IsTextBufferString()
-        {
-
-            return !string.IsNullOrEmpty(TextBuffer);
-        }
-
-        private bool IsTextBufferInteger()
-        {
-
-            return int.TryParse(TextBuffer, out _);
-        }
-
-        private bool IsTextBufferFloat()
-        {
-
-            return float.TryParse(TextBuffer, out _);
-        }
-
-        private bool IsTextBufferHexadecimal()
-        {
-
-            return Regex.IsMatch(TextBuffer, @"\A\b(0[xX])?[0-9a-fA-F]+\b\Z");
-        }
-
-        private bool IsTextBufferEmail()
-        {
-
-            return Regex.IsMatch(TextBuffer, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
-        }
-
-        private bool IsTextBufferAlphanumeric()
-        {
-
-            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z0-9]+$");
-        }
-
-        private bool IsTextBufferLetters()
-        {
-
-            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z]+$");
-        }
-
-        private bool IsTextBufferCustom()
-        {
-            if (string.IsNullOrEmpty(AllowedCharacters))
-            {
-                Api.Log(API.LogType.Warning, "AllowedCharacters is empty. Custom validation cannot proceed.");
-                return false;
-            }
-
-
-            string pattern = $"^[{Regex.Escape(AllowedCharacters)}]+$";
-
-            bool isValid = Regex.IsMatch(TextBuffer, pattern);
-
-            return isValid;
-        }
-
-
-        private void ValidateTextBuffer(string inputType)
-        {
-            bool isValid = false;
-
-            switch (inputType)
-            {
-                case "String":
-                    isValid = IsTextBufferString();
-                    break;
-                case "Integer":
-                    isValid = IsTextBufferInteger();
-                    break;
-                case "Float":
-                    isValid = IsTextBufferFloat();
-                    break;
-                case "Hexadecimal":
-                    isValid = IsTextBufferHexadecimal();
-                    break;
-                case "Email":
-                    isValid = IsTextBufferEmail();
-                    break;
-                case "Alphanumeric":
-                    isValid = IsTextBufferAlphanumeric();
-                    break;
-                case "Letters":
-                    isValid = IsTextBufferLetters();
-                    break;
-                case "Custom":
-                    isValid = IsTextBufferCustom();
-                    break;
-                default:
-                    Api.Log(API.LogType.Warning, $"Unknown InputType: {inputType}. Validation skipped.");
-                    return;
-            }
-
-            if (!isValid)
-            {
-                DismissHandler();
-                ShowError($"Input  is not a valid.Only allow {inputType}.");
-            }
-            else
-            {
-                Api.Log(API.LogType.Debug, $"TextBuffer is a valid {inputType}.");
-
-                ConvertTextBufferToSingleLine();
-                UpdateMeasure();
-                Api.Execute(OnEnterAction);
-                Stop();
-
-            }
-        }
-        private void ShowError(string errorMessage)
-        {
-
-            if (ShowErrorForm == 1)
-            {
-
-                ErrorForm errorForm = new ErrorForm(errorMessage);
-                errorForm.ShowDialog();
-            }
-            else
-            {
-
-                Api.Log(API.LogType.Error, errorMessage);
-            }
-        }
-
-        internal void ConvertTextBufferToSingleLine()
-        {
-            if (!string.IsNullOrEmpty(TextBuffer))
-            {
-                if (FormatMultiline == 1)
-                {
-                    TextBuffer = TextBuffer.Replace("\r\n", " ").Replace("\n", " ");
-                }
-            }
-        }
-        //=================================================================================================================================//
         //                                                      KeyBoard Functions                                                         //
         //=================================================================================================================================//
 
-        // ESC Helper to Terminate for ESC key and 
-        // for the unfocus skin.
         public void ESCHandler()
         {
 
@@ -775,11 +455,11 @@ namespace PluginBlurInput
                 Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
                 Api.Execute($"!Redraw");
             }
+            Api.Execute(UnValidAction);
         }
 
         public void UnFocusDismissHandler()
         {
-
             if (!IsActive) return;
             IsActive = false;
             hasResetOnce = false;
@@ -822,7 +502,7 @@ namespace PluginBlurInput
                 string clipboardText = Clipboard.GetText();
                 InsertText(clipboardText.Trim());
                 UpdateText();
-                GetPos();
+
 
             }
             else
@@ -840,7 +520,7 @@ namespace PluginBlurInput
                 TextBuffer = "";
                 CursorPosition = 0;
                 UpdateText();
-                GetPos();
+
             }
         }
         internal void Undo()
@@ -851,7 +531,7 @@ namespace PluginBlurInput
                 TextBuffer = UndoStack.Pop();
                 CursorPosition = TextBuffer.Length;
                 UpdateText();
-                GetPos();
+
             }
         }
         internal void Redo()
@@ -862,7 +542,7 @@ namespace PluginBlurInput
                 TextBuffer = RedoStack.Pop();
                 CursorPosition = TextBuffer.Length;
                 UpdateText();
-                GetPos();
+
             }
         }
         internal void SaveStateForUndo()
@@ -929,9 +609,9 @@ namespace PluginBlurInput
             Api.Execute("!Redraw");
         }
 
-
         private string ApplySubstitution(string text, string substituteRule, int useRegex = 1)
         {
+
             if (string.IsNullOrEmpty(substituteRule))
                 return text;
 
@@ -965,10 +645,10 @@ namespace PluginBlurInput
                         Api.Log(API.LogType.Error, $"Failed to apply rule: {rule}. {ex.Message}");
                     }
                 }
-                else
-                {
-                    Api.Log(API.LogType.Warning, $"Invalid rule format: {rule}");
-                }
+                /* else
+                 {
+                     Api.Log(API.LogType.Warning, $"Invalid rule format: {rule}");
+                 }*/
             }
 
             return text;
@@ -986,9 +666,6 @@ namespace PluginBlurInput
             pattern = replacement = null;
             return false;
         }
-
-        // This handler is use to update the text and measure dynamically.
-        // As this is to fix the unrecognize updation.
 
         private void UpdateMeasure()
         {
@@ -1014,16 +691,6 @@ namespace PluginBlurInput
             RedoStack.Clear();
             UpdateText();
         }
-
-        internal void GetPos()
-        {
-            Api.Execute($"!SetOption  \"{myName}\" MeterX \"[{MeterName}:X]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterY \"[{MeterName}:Y]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterW \"[{MeterName}:W]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterH \"[{MeterName}:H]\" ");
-            Api.Execute($"!UpdateMeasure  \"{myName}\"");
-        }
-
         internal void Start()
         {
             if (Disabled == 1) return;
@@ -1039,7 +706,6 @@ namespace PluginBlurInput
             }
             IsActive = true;
             hasResetOnce = false;
-            GetPos();
             CursorPosition = TextBuffer.Length;
             updateTimer.Start();
 
@@ -1083,8 +749,8 @@ namespace PluginBlurInput
             ContextFormOpen = true;
             ContextForm contextForm = new ContextForm(this);
             contextForm.ShowDialog();
-           
-          
+
+
         }
         internal void Stop()
         {
@@ -1099,8 +765,336 @@ namespace PluginBlurInput
             updateTimer.Stop();
             updateTimer.Stop();
         }
-    }
 
+        //=================================================================================================================================//
+        //                                                      ValidInputs                                                                //
+        //=================================================================================================================================//
+        private bool IsValidInput(char keyChar)
+        {
+            if (ForceValidInput == 1)
+            {
+                switch (InputType)
+                {
+                    case "Integer":
+                        return char.IsDigit(keyChar) || (keyChar == '-' && CursorPosition == 0);
+                    case "Letters":
+                        return char.IsLetter(keyChar);
+                    case "Default":
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+            else
+            {
+                return true;
+            }
+
+        }
+
+        public class ErrorForm : Form
+        {
+            private Label errorLabel;
+            private Button closeButton;
+
+            public ErrorForm(string errorMessage)
+            {
+
+                this.Text = "Error";
+                this.Size = new Size(400, 250);
+                this.StartPosition = FormStartPosition.CenterScreen;
+                this.FormBorderStyle = FormBorderStyle.FixedDialog;
+                this.ControlBox = false;
+                this.BackColor = Color.FromArgb(40, 40, 40);
+                this.ForeColor = Color.White;
+
+
+                errorLabel = new Label();
+                errorLabel.Text = errorMessage;
+                errorLabel.Font = new Font("Segoe UI", 12, FontStyle.Regular);
+                errorLabel.ForeColor = Color.White;
+                errorLabel.Location = new Point(20, 30);
+                errorLabel.Size = new Size(360, 120);
+                errorLabel.TextAlign = ContentAlignment.MiddleCenter;
+                errorLabel.AutoSize = false;
+                ShowInTaskbar = false;
+
+                closeButton = new Button();
+                closeButton.Text = "Close";
+                closeButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                closeButton.BackColor = Color.FromArgb(75, 75, 75);
+                closeButton.ForeColor = Color.White;
+                closeButton.FlatStyle = FlatStyle.Flat;
+                closeButton.FlatAppearance.BorderSize = 0;
+                closeButton.Location = new Point(150, 160);
+                closeButton.Size = new Size(100, 40);
+                closeButton.Click += (sender, e) => { this.Close(); };
+                closeButton.MouseEnter += (sender, e) => closeButton.BackColor = Color.FromArgb(100, 100, 100);
+                closeButton.MouseLeave += (sender, e) => closeButton.BackColor = Color.FromArgb(75, 75, 75);
+
+
+                this.Controls.Add(errorLabel);
+                this.Controls.Add(closeButton);
+            }
+
+
+            protected override void WndProc(ref Message m)
+            {
+
+                if (m.Msg == 0xA3)
+                {
+
+                    return;
+                }
+
+
+                base.WndProc(ref m);
+            }
+        }
+
+        private bool IsTextBufferString()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return true;
+        }
+
+        private bool IsTextBufferInteger()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return true;
+
+            return int.TryParse(TextBuffer, out _);
+        }
+
+        private bool IsTextBufferFloat()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return float.TryParse(TextBuffer, out _);
+        }
+
+        private bool IsTextBufferHexadecimal()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return Regex.IsMatch(TextBuffer, @"\A\b(0[xX])?[0-9a-fA-F]+\b\Z");
+        }
+
+        private bool IsTextBufferEmail()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return Regex.IsMatch(TextBuffer, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+        }
+
+        private bool IsTextBufferAlphanumeric()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z0-9]+$");
+        }
+
+        private bool IsTextBufferLetters()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z]+$");
+        }
+
+        private bool IsTextBufferCustom()
+        {
+            if (string.IsNullOrWhiteSpace(TextBuffer))
+                return false;
+
+            if (string.IsNullOrEmpty(AllowedCharacters))
+            {
+                Api.Log(API.LogType.Warning, "AllowedCharacters is empty. Custom validation cannot proceed.");
+                return false;
+            }
+
+            string pattern = $"^[{Regex.Escape(AllowedCharacters)}]+$";
+            return Regex.IsMatch(TextBuffer, pattern);
+        }
+
+
+        private void ValidateTextBuffer(string inputType)
+        {
+            bool isValid = false;
+
+            switch (inputType)
+            {
+                case "String":
+                    isValid = IsTextBufferString();
+                    break;
+                case "Integer":
+                    isValid = IsTextBufferInteger();
+                    break;
+                case "Float":
+                    isValid = IsTextBufferFloat();
+                    break;
+                case "Hexadecimal":
+                    isValid = IsTextBufferHexadecimal();
+                    break;
+                case "Email":
+                    isValid = IsTextBufferEmail();
+                    break;
+                case "Alphanumeric":
+                    isValid = IsTextBufferAlphanumeric();
+                    break;
+                case "Letters":
+                    isValid = IsTextBufferLetters();
+                    break;
+                case "Custom":
+                    isValid = IsTextBufferCustom();
+                    break;
+                default:
+                    Api.Log(API.LogType.Warning, $"Unknown InputType: {inputType}. Validation skipped.");
+                    return;
+            }
+
+            if (!isValid)
+            {
+                DismissHandler();
+                ShowError($"Input is not a valid.Only allow {inputType}.");
+            }
+            else
+            {
+                Api.Log(API.LogType.Debug, $"TextBuffer is a valid {inputType}.");
+
+                ConvertTextBufferToSingleLine();
+                UpdateMeasure();
+                Api.Execute(OnEnterAction);
+                Stop();
+
+            }
+        }
+        private void ShowError(string errorMessage)
+        {
+
+            if (ShowErrorForm == 1)
+            {
+
+                ErrorForm errorForm = new ErrorForm(errorMessage);
+                errorForm.ShowDialog();
+            }
+            else
+            {
+
+                Api.Log(API.LogType.Error, errorMessage);
+            }
+        }
+
+        internal void ConvertTextBufferToSingleLine()
+        {
+            if (!string.IsNullOrEmpty(TextBuffer))
+            {
+                if (FormatMultiline == 1)
+                {
+                    TextBuffer = TextBuffer.Replace("\r\n", " ").Replace("\n", " ");
+                }
+            }
+        }
+        //=================================================================================================================================//
+        //                                                      Context                                                                   //
+        //=================================================================================================================================//
+        public class ContextForm : Form
+        {
+            private readonly Measure _measure;
+
+            public ContextForm(Measure measure)
+            {
+                _measure = measure;
+
+                Text = "BlurInput Menu";
+                Size = new Size(200, 350);
+                FormBorderStyle = FormBorderStyle.None;
+                MaximizeBox = false;
+                MinimizeBox = false;
+                ControlBox = false;
+                ShowInTaskbar = false;
+                StartPosition = FormStartPosition.Manual;
+                BackColor = Color.FromArgb(30, 30, 30);
+
+
+                var cursorPosition = Cursor.Position;
+                Location = new Point(cursorPosition.X - (Size.Width / 2), cursorPosition.Y);
+
+                var undoButton = CreateStyledButton("Undo", new Point(30, 30), "\uE10E");
+                var redoButton = CreateStyledButton("Redo", new Point(30, 80), "\uE10D");
+                var copyButton = CreateStyledButton("Copy", new Point(30, 130), "\uE16F");
+                var pasteButton = CreateStyledButton("Paste", new Point(30, 180), "\uE16D");
+                var clearButton = CreateStyledButton("Clear Text", new Point(30, 230), "\uE107");
+                var cancelButton = CreateStyledButton("Cancel", new Point(30, 280), "\uE10A");
+
+                undoButton.Click += (s, e) => { _measure.Undo(); Close(); };
+                redoButton.Click += (s, e) => { _measure.Redo(); Close(); };
+                copyButton.Click += (s, e) => { _measure.CopyToClipboard(); Close(); };
+                pasteButton.Click += (s, e) => { _measure.PasteFromClipboard(); Close(); };
+                clearButton.Click += (s, e) => { _measure.ClearText(); Close(); };
+                cancelButton.Click += (s, e) => { Close(); };
+
+
+                Controls.Add(undoButton);
+                Controls.Add(redoButton);
+                Controls.Add(copyButton);
+                Controls.Add(pasteButton);
+                Controls.Add(clearButton);
+                Controls.Add(cancelButton);
+            }
+
+            private System.Windows.Forms.Button CreateStyledButton(string text, Point location, string iconUnicode = null)
+            {
+                var button = new System.Windows.Forms.Button
+                {
+                    Text = string.IsNullOrEmpty(iconUnicode) ? text : $"{iconUnicode} {text}",
+                    Font = new Font("Segoe UI Symbol", 10, FontStyle.Bold),
+                    ForeColor = Color.White,
+                    BackColor = Color.FromArgb(70, 70, 70),
+                    FlatStyle = FlatStyle.Flat,
+                    FlatAppearance = { BorderSize = 0 },
+                    Location = location,
+                    Size = new Size(150, 40),
+                    Cursor = Cursors.Hand,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+
+                return button;
+            }
+
+
+            protected override void OnFormClosing(FormClosingEventArgs e)
+            {
+                base.OnFormClosing(e);
+                _measure.ContextFocusForm = true;
+                _measure.ContextFormOpen = false;
+            }
+
+            protected override void OnDeactivate(EventArgs e)
+            {
+                base.OnDeactivate(e);
+
+
+                var mousePos = Cursor.Position;
+                var formRect = new Rectangle(Location, Size);
+
+                if (!formRect.Contains(mousePos))
+                {
+                    _measure.ContextFocusForm = true;
+                    _measure.ContextFormOpen = false;
+                    Close();
+                }
+            }
+
+            public bool ContextFocus { get; private set; }
+        }
+    }
     //=================================================================================================================================//
     //                                                     Rainmeter Class                                                             //
     //=================================================================================================================================//
