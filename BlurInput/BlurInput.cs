@@ -53,7 +53,9 @@ namespace PluginBlurInput
         private bool ContextFocusForm = false;
         private bool ContextFormOpen = false;
         private string UnValidAction = "";
-
+        private Color BackgroundColor = Color.FromArgb(30, 30, 30); // Default color
+        private Color ButtonColor = Color.FromArgb(70, 70, 70);     // Default button color
+        private Color TextColor = Color.White;                     // Default text color
 
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
@@ -103,8 +105,7 @@ namespace PluginBlurInput
             Width = api.ReadInt("Width", 0);
             myName = api.GetMeasureName();
             UnFocusDismiss = api.ReadInt("UnFocusDismiss", 0);
-            string rootConfigPath = api.ReplaceVariables("#CURRENTPATH#");
-            string currentFile = api.ReplaceVariables("#CURRENTFILE#");
+            DismissAction = api.ReadString("DismissAction", "");
             MeterX = api.ReadInt("MeterX", 0); ;
             MeterY = api.ReadInt("MeterY", 0);
             MeterWidth = api.ReadInt("MeterW", 0);
@@ -116,7 +117,12 @@ namespace PluginBlurInput
             ShowErrorForm = api.ReadInt("ShowErrorForm", 0);
             ForceValidInput = api.ReadInt("ForceValidInput", 0);
             UnValidAction = api.ReadString("UnValidInputAction", "");
-
+            string backgroundColorString = api.ReadString("BackgroundColor", "30,30,30");
+            string buttonColorString = api.ReadString("ButtonColor", "70,70,70");
+            string textColorString = api.ReadString("TextColor", "255,255,255");
+            BackgroundColor = ParseColor(backgroundColorString, BackgroundColor);
+            ButtonColor = ParseColor(buttonColorString, ButtonColor);
+            TextColor = ParseColor(textColorString, TextColor);
 
 
             InputType = api.ReadString("InputType", "String").Trim();
@@ -303,7 +309,6 @@ namespace PluginBlurInput
                     if (IsMultiline && !ctrlPressed)
                     {
                         InsertText("\n");
-                        Api.Execute($"!Log  \"Meter In Focus\"");
                     }
                     else
                     {
@@ -403,7 +408,7 @@ namespace PluginBlurInput
                 Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
                 Api.Execute($"!Redraw");
             }
-            Api.Execute(OnESCAction);
+            // Api.Execute(OnESCAction);
         }
         public void DismissHandler()
         {
@@ -412,7 +417,7 @@ namespace PluginBlurInput
 
             IsActive = false;
             hasResetOnce = false;
-
+            Api.Execute(UnValidAction);
             TextBuffer = defaultValue;
             CursorPosition = 0;
             UndoStack.Clear();
@@ -425,7 +430,7 @@ namespace PluginBlurInput
                 Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
                 Api.Execute($"!Redraw");
             }
-            Api.Execute(UnValidAction);
+
         }
 
         public void UnFocusDismissHandler()
@@ -435,7 +440,6 @@ namespace PluginBlurInput
             hasResetOnce = false;
             Api.Execute(DismissAction);
             TextBuffer = defaultValue;
-
             CursorPosition = 0;
             UndoStack.Clear();
             RedoStack.Clear();
@@ -447,7 +451,7 @@ namespace PluginBlurInput
                 Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
                 Api.Execute($"!Redraw");
             }
-
+            // Api.Execute(DismissAction);
         }
 
 
@@ -524,7 +528,26 @@ namespace PluginBlurInput
         //=================================================================================================================================//
         //                                                     CommonFunctions                                                             //
         //=================================================================================================================================//
+        private Color ParseColor(string colorString, Color defaultColor)
+        {
+            try
+            {
+                string[] parts = colorString.Split(',');
+                if (parts.Length == 3)
+                {
+                    int r = int.Parse(parts[0].Trim());
+                    int g = int.Parse(parts[1].Trim());
+                    int b = int.Parse(parts[2].Trim());
+                    return Color.FromArgb(r, g, b);
+                }
+            }
+            catch
+            {
+                Api.Log(Rainmeter.API.LogType.Warning, $"Invalid color format: '{colorString}'. Using default color.");
 
+            }
+            return defaultColor;
+        }
         private void InsertText(string text)
         {
 
@@ -537,6 +560,9 @@ namespace PluginBlurInput
             TextBuffer = TextBuffer.Insert(CursorPosition, text);
             CursorPosition = Math.Min(TextBuffer.Length, CursorPosition + text.Length);
         }
+
+
+
         private void UpdateText()
         {
             if (!IsActive || string.IsNullOrEmpty(MeterName))
@@ -583,6 +609,8 @@ namespace PluginBlurInput
 
 
 
+
+
         private string ApplySubstitution(string text, string substituteRule, int useRegex = 1)
         {
 
@@ -608,7 +636,7 @@ namespace PluginBlurInput
 
                             Regex.Match("", pattern);
                             text = Regex.Replace(text, pattern, replacement);
-                           // text = text.Replace(pattern, replacement);
+
                         }
                         else
                         {
@@ -721,10 +749,15 @@ namespace PluginBlurInput
             if (ContextFormOpen)
                 return;
 
-            Api.Execute($"!Log  \"ContextForm Set to False\"");
+
             ContextFocusForm = false;
             ContextFormOpen = true;
-            ContextForm contextForm = new ContextForm(this);
+            ContextForm contextForm = new ContextForm(
+    this,
+    BackgroundColor,  // Custom background color
+    ButtonColor,      // Custom button color
+    TextColor         // Custom text color
+);
             contextForm.ShowDialog();
 
 
@@ -769,47 +802,56 @@ namespace PluginBlurInput
 
         }
 
+
         public class ErrorForm : Form
         {
             private Label errorLabel;
             private Button closeButton;
 
-            public ErrorForm(string errorMessage)
+            public ErrorForm(string errorMessage, Color backgroundColor, Color buttonColor, Color textColor)
             {
-
+                // Set up the form
                 this.Text = "Error";
                 this.Size = new Size(400, 250);
                 this.StartPosition = FormStartPosition.CenterScreen;
                 this.FormBorderStyle = FormBorderStyle.FixedDialog;
                 this.ControlBox = false;
-                this.BackColor = Color.FromArgb(40, 40, 40);
-                this.ForeColor = Color.White;
+                this.BackColor = backgroundColor;
+                this.ForeColor = textColor;
+                this.ShowInTaskbar = false;
 
+                // Configure error message label
+                errorLabel = new Label
+                {
+                    Text = errorMessage,
+                    Font = new Font("Segoe UI", 12, FontStyle.Regular),
+                    ForeColor = textColor,
+                    Location = new Point(20, 30),
+                    Size = new Size(360, 120),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    AutoSize = false
+                };
 
-                errorLabel = new Label();
-                errorLabel.Text = errorMessage;
-                errorLabel.Font = new Font("Segoe UI", 12, FontStyle.Regular);
-                errorLabel.ForeColor = Color.White;
-                errorLabel.Location = new Point(20, 30);
-                errorLabel.Size = new Size(360, 120);
-                errorLabel.TextAlign = ContentAlignment.MiddleCenter;
-                errorLabel.AutoSize = false;
-                ShowInTaskbar = false;
+                // Configure close button
+                closeButton = new Button
+                {
+                    Text = "Close",
+                    Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                    BackColor = buttonColor,
+                    ForeColor = textColor,
+                    FlatStyle = FlatStyle.Flat,
+                    Location = new Point(150, 160),
+                    Size = new Size(100, 40),
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
 
-                closeButton = new Button();
-                closeButton.Text = "Close";
-                closeButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-                closeButton.BackColor = Color.FromArgb(75, 75, 75);
-                closeButton.ForeColor = Color.White;
-                closeButton.FlatStyle = FlatStyle.Flat;
+                // Remove button border and add hover effect
                 closeButton.FlatAppearance.BorderSize = 0;
-                closeButton.Location = new Point(150, 160);
-                closeButton.Size = new Size(100, 40);
                 closeButton.Click += (sender, e) => { this.Close(); };
-                closeButton.MouseEnter += (sender, e) => closeButton.BackColor = Color.FromArgb(100, 100, 100);
-                closeButton.MouseLeave += (sender, e) => closeButton.BackColor = Color.FromArgb(75, 75, 75);
+                closeButton.MouseEnter += (sender, e) => closeButton.BackColor = ControlPaint.Dark(buttonColor, 0.2f);
+                closeButton.MouseLeave += (sender, e) => closeButton.BackColor = buttonColor;
 
-
+                // Add controls to the form
                 this.Controls.Add(errorLabel);
                 this.Controls.Add(closeButton);
             }
@@ -832,7 +874,7 @@ namespace PluginBlurInput
         private bool IsTextBufferString()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return true;
         }
@@ -848,7 +890,7 @@ namespace PluginBlurInput
         private bool IsTextBufferFloat()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return float.TryParse(TextBuffer, out _);
         }
@@ -856,7 +898,7 @@ namespace PluginBlurInput
         private bool IsTextBufferHexadecimal()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return Regex.IsMatch(TextBuffer, @"\A\b(0[xX])?[0-9a-fA-F]+\b\Z");
         }
@@ -864,7 +906,7 @@ namespace PluginBlurInput
         private bool IsTextBufferEmail()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return Regex.IsMatch(TextBuffer, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
         }
@@ -872,7 +914,7 @@ namespace PluginBlurInput
         private bool IsTextBufferAlphanumeric()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return Regex.IsMatch(TextBuffer, @"^[a-zA-Z0-9]+$");
         }
@@ -880,7 +922,7 @@ namespace PluginBlurInput
         private bool IsTextBufferLetters()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             return Regex.IsMatch(TextBuffer, @"^[a-zA-Z]+$");
         }
@@ -888,7 +930,7 @@ namespace PluginBlurInput
         private bool IsTextBufferCustom()
         {
             if (string.IsNullOrWhiteSpace(TextBuffer))
-                return false;
+                return true;
 
             if (string.IsNullOrEmpty(AllowedCharacters))
             {
@@ -958,7 +1000,7 @@ namespace PluginBlurInput
             if (ShowErrorForm == 1)
             {
 
-                ErrorForm errorForm = new ErrorForm(errorMessage);
+                ErrorForm errorForm = new ErrorForm(errorMessage, BackgroundColor, ButtonColor, TextColor);
                 errorForm.ShowDialog();
             }
             else
@@ -985,9 +1027,12 @@ namespace PluginBlurInput
         {
             private readonly Measure _measure;
 
-            public ContextForm(Measure measure)
+            public ContextForm(Measure measure, Color backgroundColor, Color buttonColor, Color textColor)
             {
                 _measure = measure;
+
+                // Apply custom colors
+                BackColor = backgroundColor;
 
                 Text = "BlurInput Menu";
                 Size = new Size(200, 350);
@@ -997,19 +1042,19 @@ namespace PluginBlurInput
                 ControlBox = false;
                 ShowInTaskbar = false;
                 StartPosition = FormStartPosition.Manual;
-                BackColor = Color.FromArgb(30, 30, 30);
-
 
                 var cursorPosition = Cursor.Position;
                 Location = new Point(cursorPosition.X - (Size.Width / 2), cursorPosition.Y);
 
-                var undoButton = CreateStyledButton("Undo", new Point(30, 30), "\uE10E");
-                var redoButton = CreateStyledButton("Redo", new Point(30, 80), "\uE10D");
-                var copyButton = CreateStyledButton("Copy", new Point(30, 130), "\uE16F");
-                var pasteButton = CreateStyledButton("Paste", new Point(30, 180), "\uE16D");
-                var clearButton = CreateStyledButton("Clear Text", new Point(30, 230), "\uE107");
-                var cancelButton = CreateStyledButton("Cancel", new Point(30, 280), "\uE10A");
+                // Create buttons with custom colors
+                var undoButton = CreateStyledButton("Undo", new Point(30, 30), "\uE10E", buttonColor, textColor);
+                var redoButton = CreateStyledButton("Redo", new Point(30, 80), "\uE10D", buttonColor, textColor);
+                var copyButton = CreateStyledButton("Copy", new Point(30, 130), "\uE16F", buttonColor, textColor);
+                var pasteButton = CreateStyledButton("Paste", new Point(30, 180), "\uE16D", buttonColor, textColor);
+                var clearButton = CreateStyledButton("Clear Text", new Point(30, 230), "\uE107", buttonColor, textColor);
+                var cancelButton = CreateStyledButton("Cancel", new Point(30, 280), "\uE10A", buttonColor, textColor);
 
+                // Add button actions
                 undoButton.Click += (s, e) => { _measure.Undo(); Close(); };
                 redoButton.Click += (s, e) => { _measure.Redo(); Close(); };
                 copyButton.Click += (s, e) => { _measure.CopyToClipboard(); Close(); };
@@ -1017,7 +1062,7 @@ namespace PluginBlurInput
                 clearButton.Click += (s, e) => { _measure.ClearText(); Close(); };
                 cancelButton.Click += (s, e) => { Close(); };
 
-
+                // Add buttons to the form
                 Controls.Add(undoButton);
                 Controls.Add(redoButton);
                 Controls.Add(copyButton);
@@ -1026,14 +1071,14 @@ namespace PluginBlurInput
                 Controls.Add(cancelButton);
             }
 
-            private System.Windows.Forms.Button CreateStyledButton(string text, Point location, string iconUnicode = null)
+            private Button CreateStyledButton(string text, Point location, string iconUnicode, Color buttonColor, Color textColor)
             {
-                var button = new System.Windows.Forms.Button
+                var button = new Button
                 {
-                    Text = string.IsNullOrEmpty(iconUnicode) ? text : $"{iconUnicode} {text}",
+                    Text = $"{iconUnicode} {text}",
                     Font = new Font("Segoe UI Symbol", 10, FontStyle.Bold),
-                    ForeColor = Color.White,
-                    BackColor = Color.FromArgb(70, 70, 70),
+                    ForeColor = textColor,
+                    BackColor = buttonColor,
                     FlatStyle = FlatStyle.Flat,
                     FlatAppearance = { BorderSize = 0 },
                     Location = location,
