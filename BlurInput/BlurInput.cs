@@ -63,6 +63,7 @@ namespace PluginBlurInput
         private int EnableInActiveValue = 0;
         private List<string> HistoryStack = new List<string>();
         private int HistoryIndex = -1;
+        private bool  ResetOnce = false;
 
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
@@ -132,17 +133,17 @@ namespace PluginBlurInput
             BackgroundColor = ParseColor(backgroundColorString, BackgroundColor);
             ButtonColor = ParseColor(buttonColorString, ButtonColor);
             TextColor = ParseColor(textColorString, TextColor);
-
-            InputType = api.ReadString("InputType", "String").Trim();
+            InputType = api.ReadString("InputType", "String").Trim().ToLowerInvariant();
+         
             if (
-                InputType != "String"
-                && InputType != "Integer"
-                && InputType != "Float"
-                && InputType != "Letters"
-                && InputType != "Alphanumeric"
-                && InputType != "Hexadecimal"
-                && InputType != "Email"
-                && InputType != "Custom"
+                InputType != "string"
+                && InputType != "integer"
+                && InputType != "float"
+                && InputType != "letters"
+                && InputType != "alphanumeric"
+                && InputType != "hexadecimal"
+                && InputType != "email"
+                && InputType != "custom"
             )
             {
                 api.Log(
@@ -155,6 +156,7 @@ namespace PluginBlurInput
             if (InputType == "Custom")
             {
                 AllowedCharacters = api.ReadString("AllowedCharacters", "");
+              
                 if (string.IsNullOrEmpty(AllowedCharacters))
                 {
                     api.Log(
@@ -553,6 +555,7 @@ namespace PluginBlurInput
                 return;
             IsActive = false;
             hasResetOnce = false;
+            ResetOnce = false;
             Api.Execute(OnESCAction);
             TextBuffer = defaultValue;
             CursorPosition = 0;
@@ -586,7 +589,15 @@ namespace PluginBlurInput
                 return;
 
             UpdateMeter();
-            Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"\"\"{TextBuffer}\"\"\" ");
+            if (EnableInActiveValue == 1)
+            {
+                Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"\" ");
+            }
+            else
+            {
+                Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"\"\"{TextBuffer}\"\"\" ");
+            }
+                
             Api.Execute($"!UpdateMeasure  \"{myName}\" ");
         }
 
@@ -597,6 +608,7 @@ namespace PluginBlurInput
 
             IsActive = false;
             hasResetOnce = false;
+            ResetOnce = false;
             Api.Execute(UnValidAction);
             TextBuffer = defaultValue;
             CursorPosition = 0;
@@ -612,6 +624,7 @@ namespace PluginBlurInput
                 return;
             IsActive = false;
             hasResetOnce = false;
+            ResetOnce = false;
             Api.Execute(DismissAction);
             TextBuffer = defaultValue;
             CursorPosition = 0;
@@ -731,6 +744,9 @@ namespace PluginBlurInput
         private void UpdateText()
         {
             if (!IsActive || string.IsNullOrEmpty(MeterName))
+                return;
+
+            if (!ResetOnce)
                 return;
 
             CursorPosition = Math.Max(0, Math.Min(CursorPosition, TextBuffer.Length));
@@ -935,6 +951,7 @@ namespace PluginBlurInput
             CursorPosition = TextBuffer.Length;
             UndoStack.Clear();
             RedoStack.Clear();
+            ResetOnce = true;        
             UpdateText();
         }
 
@@ -964,6 +981,7 @@ namespace PluginBlurInput
 
             IsActive = false;
             hasResetOnce = false;
+            ResetOnce = false;
             CursorPosition = 0;
             UndoStack.Clear();
             RedoStack.Clear();
@@ -980,11 +998,11 @@ namespace PluginBlurInput
             {
                 switch (InputType)
                 {
-                    case "Integer":
+                    case "integer":
                         return char.IsDigit(keyChar) || (keyChar == '-' && CursorPosition == 0);
-                    case "Letters":
+                    case "letters":
                         return char.IsLetter(keyChar);
-                    case "Default":
+                    case "default":
                         return true;
                     default:
                         return true;
@@ -1076,28 +1094,28 @@ namespace PluginBlurInput
 
             switch (inputType)
             {
-                case "String":
+                case "string":
                     isValid = IsTextBufferString();
                     break;
-                case "Integer":
+                case "integer":
                     isValid = IsTextBufferInteger();
                     break;
-                case "Float":
+                case "float":
                     isValid = IsTextBufferFloat();
                     break;
-                case "Hexadecimal":
+                case "hexadecimal":
                     isValid = IsTextBufferHexadecimal();
                     break;
-                case "Email":
+                case "email":
                     isValid = IsTextBufferEmail();
                     break;
-                case "Alphanumeric":
+                case "alphanumeric":
                     isValid = IsTextBufferAlphanumeric();
                     break;
-                case "Letters":
+                case "letters":
                     isValid = IsTextBufferLetters();
                     break;
-                case "Custom":
+                case "custom":
                     isValid = IsTextBufferCustom();
                     break;
                 default:
