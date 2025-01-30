@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -434,69 +435,127 @@ namespace PluginBlurInput
 
         private void MoveCursorUp()
         {
-            if (CursorPosition == 0)
+            try
             {
-                return;
-            }
+                if (CursorPosition == 0)
+                {
+                 //   LogError("MoveCursorUp() called, but CursorPosition is already 0.");
+                    return;
+                }
 
-            int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
-            if (currentLineStart == -1)
-            {
-                CursorPosition = 0;
-            }
-            else
-            {
+                // Find the start of the current line
+                int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
+              //  LogError($"CursorPosition: {CursorPosition}, CurrentLineStart: {currentLineStart}");
+
+                if (currentLineStart == -1)
+                {
+                    CursorPosition = 0;
+                   // LogError("No previous line found. Cursor moved to 0.");
+                    return;
+                }
+
+                // Find the start of the previous line
                 int previousLineStart = TextBuffer.LastIndexOf('\n', currentLineStart - 1);
-                int lineOffset = CursorPosition - currentLineStart;
+               // LogError($"PreviousLineStart: {previousLineStart}");
 
                 if (previousLineStart == -1)
                 {
-                    CursorPosition = Math.Min(currentLineStart, lineOffset - 1);
+                    CursorPosition = 0;
+                    //LogError("Previous line does not exist. Cursor moved to 0.");
+                    return;
                 }
-                else
-                {
-                    CursorPosition = Math.Min(previousLineStart + lineOffset, currentLineStart - 1);
-                }
+
+                // Find offset within the current line
+                int lineOffset = CursorPosition - (currentLineStart + 1);
+              //  LogError($"LineOffset: {lineOffset}");
+
+                // Move cursor safely
+                CursorPosition = Math.Min(previousLineStart + 1 + lineOffset, currentLineStart);
+               // LogError($"Cursor moved up to {CursorPosition}");
+            }
+            catch (Exception ex)
+            {
+              //  LogError($"Exception in MoveCursorUp: {ex.Message}\n{ex.StackTrace}");
             }
         }
+
+        private void LogError(string message)
+        {
+            try
+            {
+                string tempPath = Path.Combine(Path.GetTempPath(), "Rainmeter_ErrorLog.txt");
+                string logMessage = $"{DateTime.Now}: {message}\n";
+                File.AppendAllText(tempPath, logMessage);
+            }
+            catch
+            {
+                // If logging fails, avoid crashing the program.
+            }
+        }
+
+
 
         private void MoveCursorDown()
         {
-            if (CursorPosition == 0)
+            try
             {
-                return;
-            }
+                if (CursorPosition >= TextBuffer.Length)
+                {
+                   // LogError("MoveCursorDown() called, but CursorPosition is already at the end.");
+                    return; // Already at the last position
+                }
 
-            if (CursorPosition == TextBuffer.Length)
-            {
-                return;
-            }
+                // Find the start of the current line
+                int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
+                if (currentLineStart == -1)
+                {
+                    currentLineStart = -1; // Special case: first line
+                }
 
-            int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
-            if (currentLineStart == -1)
-            {
-                currentLineStart = -1;
-            }
+                // Find the end of the current line
+                int currentLineEnd = TextBuffer.IndexOf('\n', CursorPosition);
+                if (currentLineEnd == -1)
+                {
+                  //  LogError("No next line exists. Cursor does not move.");
+                    return; // No next line exists
+                }
 
-            int currentLineEnd = TextBuffer.IndexOf('\n', CursorPosition);
-            if (currentLineEnd == -1)
-            {
-                CursorPosition = TextBuffer.Length;
-                return;
-            }
+                // If the cursor is at position 0 and the first line is empty, move directly to the second line
+                if (CursorPosition == 0 && currentLineEnd == 0)
+                {
+                    CursorPosition = 1;
+                   // LogError($"Cursor was at position 0 on an empty line, moved to {CursorPosition}");
+                    return;
+                }
 
-            int lineOffset = CursorPosition - (currentLineStart + 1);
+                // Find the start of the next line
+                int nextLineStart = currentLineEnd + 1;
+                if (nextLineStart >= TextBuffer.Length)
+                {
+                   // LogError("Next line start is at or beyond the text length. Cursor does not move.");
+                    return;
+                }
 
-            int nextLineEnd = TextBuffer.IndexOf('\n', currentLineEnd + 1);
-            if (nextLineEnd == -1)
+                // Find the end of the next line
+                int nextLineEnd = TextBuffer.IndexOf('\n', nextLineStart);
+                if (nextLineEnd == -1)
+                {
+                    nextLineEnd = TextBuffer.Length;
+                }
+
+                // Compute cursor offset in the current line
+                int lineOffset = CursorPosition - (currentLineStart + 1);
+
+                // Move cursor to the next line with the same column offset (or as close as possible)
+                CursorPosition = Math.Min(nextLineStart + lineOffset, nextLineEnd);
+               // LogError($"Cursor moved down to {CursorPosition}");
+           }
+            catch (Exception ex)
             {
-                CursorPosition = Math.Min(TextBuffer.Length, currentLineEnd + 1 + lineOffset);
-            }
-            else
-            {
-                CursorPosition = Math.Min(currentLineEnd + 1 + lineOffset, nextLineEnd);
+                //LogError($"Exception in MoveCursorDown: {ex.Message}\n{ex.StackTrace}");
             }
         }
+
 
         private void NavigateHistory(int direction)
         {
