@@ -206,6 +206,3 @@ Each parameter is detailed below with its default value, requirement status, and
 * **Description:**\
   Determines the text color used in the form for both the `ContextForm` and the `ErrorDialog` class.
 
-***
-
-This layout separates each parameter clearly, allowing you to quickly locate and understand the configuration options without the constraints of a table format.
