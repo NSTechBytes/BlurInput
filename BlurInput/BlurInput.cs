@@ -132,6 +132,7 @@ namespace PluginBlurInput
             if (!_isActive) return;
 
             DeactivatePlugin();
+            UpdateMeter();
         }
 
         internal void ClearText()
