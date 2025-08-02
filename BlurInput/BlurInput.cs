@@ -13,59 +13,15 @@ namespace PluginBlurInput
 {
     public class Measure
     {
-        public API api;
-        public string myName;
-        public int Disabled;
-        private string MeterName = "";
-        private string TextBuffer = "";
-        private string OnEnterAction;
-        private string OnESCAction;
-        private string Cursor = "|";
-        private int CursorPosition = 0;
-        private Rainmeter.API Api;
-        private string defaultValue = "";
-        private int FormatMultiline = 0;
-        private int ShowErrorForm = 1;
-        private string DismissAction;
-        private int ForceValidInput = 1;
-        private Stack<string> UndoStack = new Stack<string>();
-        private Stack<string> RedoStack = new Stack<string>();
-        private bool CapsLockActive = false;
-        private const string TabSpaces = "    ";
-        private bool IsActive = false;
-        private bool IsPassword = false;
-        private bool IsMultiline = false;
-        private int CharacterLimit = 0;
-        private int Width = 0;
-        private string InputType = "String";
-        private string AllowedCharacters = "";
-        private bool isTextCleared = false;
-        private bool isInitialized = false;
-        private System.Timers.Timer updateTimer;
-        private const double UpdateInterval = 25;
-        private int UnFocusDismiss = 0;
-        private System.Timers.Timer resetTimer;
-        private bool hasResetOnce = false;
-        private string substituteRule = "";
-        private string InActiveValue = "";
-        private int useRegex = 0;
-        private int MeterX,
-            MeterY,
-            MeterWidth,
-            MeterHeight;
-        private int SkinX,
-            SkinY;
-        public bool ContextFocusForm = false;
-        public bool ContextFormOpen = false;
-        private string UnValidAction = "";
-        public Color BackgroundColor = Color.FromArgb(30, 30, 30);
-        public Color ButtonColor = Color.FromArgb(70, 70, 70);
-        public Color TextColor = Color.White;
-        private int EnableInActiveValue = 0;
-        private List<string> HistoryStack = new List<string>();
-        private int HistoryIndex = -1;
-        private bool  ResetOnce = false;
+        #region Constants
+        private const string DEFAULT_CURSOR = "|";
+        private const string TAB_SPACES = "    ";
+        private const double UPDATE_INTERVAL = 25;
+        private const int MAX_HISTORY_SIZE = 100;
+        private const int RESET_TIMER_DELAY = 50;
+        #endregion
 
+        #region Win32 API
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
 
@@ -73,239 +29,361 @@ namespace PluginBlurInput
         private static extern short GetKeyState(int nVirtKey);
 
         [DllImport("user32.dll")]
-        private static extern int ToUnicode(
-            uint virtualKey,
-            uint scanCode,
-            byte[] keyboardState,
-            [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder receivingBuffer,
-            int bufferSize,
-            uint flags
-        );
+        private static extern int ToUnicode(uint virtualKey, uint scanCode, byte[] keyboardState,
+            [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder receivingBuffer, int bufferSize, uint flags);
 
         [DllImport("user32.dll")]
         private static extern bool GetKeyboardState(byte[] lpKeyState);
+        #endregion
 
-        public string GetUserInput()
+        #region Fields
+        private Rainmeter.API _api;
+        private System.Timers.Timer _updateTimer;
+        private System.Timers.Timer _resetTimer;
+
+        // Plugin configuration
+        private PluginConfig _config;
+        private InputValidator _validator;
+        private TextProcessor _textProcessor;
+        private CursorManager _cursorManager;
+
+        // State management
+        private bool _isActive = false;
+        private bool _isInitialized = false;
+        private bool _hasResetOnce = false;
+        private bool _resetOnce = false;
+
+        // Text and cursor state
+        private string _textBuffer = "";
+        private int _cursorPosition = 0;
+
+        // History and undo/redo
+        private readonly Stack<string> _undoStack = new Stack<string>();
+        private readonly Stack<string> _redoStack = new Stack<string>();
+        private readonly List<string> _historyStack = new List<string>();
+        private int _historyIndex = -1;
+
+        // UI state
+        private bool _contextFocusForm = false;
+        private bool _contextFormOpen = false;
+
+        // Reference to the current context form
+        private ContextForm _currentContextForm = null;
+        #endregion
+
+        #region Properties
+        public string MyName { get; private set; }
+        public bool ContextFocusForm
         {
-            return TextBuffer;
+            get => _contextFocusForm;
+            set => _contextFocusForm = value;
         }
+        public bool ContextFormOpen
+        {
+            get => _contextFormOpen;
+            set => _contextFormOpen = value;
+        }
+        #endregion
 
-        //=================================================================================================================================//
-        //                                                      Reload                                                                     //
-        //=================================================================================================================================//
+        #region Public Methods
+        public string GetUserInput() => _textBuffer;
 
         internal void Reload(Rainmeter.API api, ref double maxValue)
         {
-            Api = api;
-            TextBuffer = ApplySubstitution(TextBuffer, substituteRule, useRegex);
-            updateTimer = new System.Timers.Timer(UpdateInterval);
-            updateTimer.Elapsed += (sender, e) => UpdateTest();
-            updateTimer.AutoReset = true;
-            MeterName = api.ReadString("MeterName", "");
-            InActiveValue = api.ReadString("InActiveValue", "");
-            FormatMultiline = api.ReadInt("FormatMultiline", 0);
-            Disabled = api.ReadInt("Disabled", 0);
-            Cursor = api.ReadString("Cursor", "|");
-            IsPassword = api.ReadInt("Password", 0) == 1;
-            IsMultiline = api.ReadInt("Multiline", 0) == 1;
-            CharacterLimit = api.ReadInt("InputLimit", 0);
-            OnEnterAction = api.ReadString("OnEnterAction", "").Trim();
-            OnESCAction = api.ReadString("OnESCAction", "").Trim();
-            defaultValue = api.ReadString("DefaultValue", "").Trim();
-            Width = api.ReadInt("ViewLimit", 0);
-            myName = api.GetMeasureName();
-            UnFocusDismiss = api.ReadInt("UnFocusDismiss", 0);
-            DismissAction = api.ReadString("OnDismissAction", "");
-            MeterX = api.ReadInt("MeterX", 0);
-            EnableInActiveValue = api.ReadInt("SetInActiveValue", 0);
-            MeterY = api.ReadInt("MeterY", 0);
-            MeterWidth = api.ReadInt("MeterW", 0);
-            MeterHeight = api.ReadInt("MeterH", 0);
-            SkinX = int.Parse(api.ReplaceVariables("#CURRENTCONFIGX#"));
-            SkinY = int.Parse(api.ReplaceVariables("#CURRENTCONFIGY#"));
-            useRegex = api.ReadInt("RegExpSubstitute", 0);
-            substituteRule = api.ReadString("Substitute", "");
-            ShowErrorForm = api.ReadInt("ShowErrorDialog", 0);
-            ForceValidInput = api.ReadInt("ForceValidInput", 0);
-            UnValidAction = api.ReadString("OnInvalidAction", "");
-            string backgroundColorString = api.ReadString("FormBackgroundColor", "30,30,30");
-            string buttonColorString = api.ReadString("FormButtonColor", "70,70,70");
-            string textColorString = api.ReadString("FormTextColor", "255,255,255");
-            BackgroundColor = ParseColor(backgroundColorString, BackgroundColor);
-            ButtonColor = ParseColor(buttonColorString, ButtonColor);
-            TextColor = ParseColor(textColorString, TextColor);
-            InputType = api.ReadString("InputType", "String").Trim().ToLowerInvariant();
-         
-            if (
-                InputType != "string"
-                && InputType != "integer"
-                && InputType != "float"
-                && InputType != "letters"
-                && InputType != "alphanumeric"
-                && InputType != "hexadecimal"
-                && InputType != "email"
-                && InputType != "custom"
-            )
+            _api = api;
+            MyName = api.GetMeasureName();
+
+            LoadConfiguration();
+            InitializeComponents();
+            InitializeTimers();
+
+            if (!_isInitialized)
             {
-                api.Log(
-                    API.LogType.Warning,
-                    $"Invalid InputType '{InputType}', defaulting to 'String'."
-                );
-                InputType = "String";
+                InitializeTextBuffer();
+                _isInitialized = true;
             }
 
-            if (InputType == "Custom")
-            {
-                AllowedCharacters = api.ReadString("AllowedCharacters", "");
-              
-                if (string.IsNullOrEmpty(AllowedCharacters))
-                {
-                    api.Log(
-                        API.LogType.Warning,
-                        "InputType 'Custom' requires 'AllowedCharacters'. Defaulting to 'String'."
-                    );
-                    InputType = "String";
-                }
-            }
-
-            if (!isInitialized)
-            {
-                TextBuffer =
-                    defaultValue.Length > CharacterLimit && CharacterLimit > 0
-                        ? defaultValue.Substring(0, CharacterLimit)
-                        : defaultValue;
-
-                CursorPosition = TextBuffer.Length;
-                isInitialized = true;
-            }
-
-            if (CharacterLimit > 0 && TextBuffer.Length > CharacterLimit)
-            {
-                TextBuffer = TextBuffer.Substring(0, CharacterLimit);
-                CursorPosition = Math.Min(CursorPosition, CharacterLimit);
-            }
-
-            CursorPosition = Math.Max(0, Math.Min(CursorPosition, TextBuffer.Length));
+            ValidateAndAdjustTextBuffer();
         }
 
-        internal void UpdateTest()
-        {
-            if (!IsActive)
-                return;
-            GetPos();
-        }
-
-        internal void GetPos()
-        {
-            Api.Execute($"!SetOption  \"{myName}\" MeterX \"[{MeterName}:X]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterY \"[{MeterName}:Y]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterW \"[{MeterName}:W]\" ");
-            Api.Execute($"!SetOption  \"{myName}\" MeterH \"[{MeterName}:H]\" ");
-            Api.Execute($"!UpdateMeasure  \"{myName}\"");
-        }
-
-        private Point GetMousePosition()
-        {
-            return System.Windows.Forms.Cursor.Position;
-        }
-
-        private bool IsMouseInsideMeter(Point mousePosition)
-        {
-            int meterGlobalX = MeterX + SkinX;
-            int meterGlobalY = MeterY + SkinY;
-
-            return mousePosition.X >= meterGlobalX
-                && mousePosition.X <= meterGlobalX + MeterWidth
-                && mousePosition.Y >= meterGlobalY
-                && mousePosition.Y <= meterGlobalY + MeterHeight;
-        }
-
-        //=================================================================================================================================//
-        //                                                     Update                                                                      //
-        //=================================================================================================================================//
         internal void Update()
         {
-            if (!IsActive || string.IsNullOrEmpty(MeterName))
+            if (!_isActive || string.IsNullOrEmpty(_config.MeterName))
                 return;
 
-            if (
-                Control.MouseButtons == MouseButtons.Left
-                || Control.MouseButtons == MouseButtons.Right
-            )
-            {
-                Point mousePosition = GetMousePosition();
+            HandleMouseInput();
+            HandleKeyboardInput();
+        }
 
-                if (IsMouseInsideMeter(mousePosition))
-                {
-                    if (Control.MouseButtons == MouseButtons.Right)
-                    {
-                        ShowContextForm();
-                    }
-                    //  Api.Execute($"!Log  \"Meter In Focus\"");
-                }
-                else
-                {
-                    if (UnFocusDismiss == 1 && IsActive && ContextFocusForm)
-                    {
-                        UnFocusDismissHandler();
-                        //Api.Execute($"!Log  \"Meter In UnFocus\"");
-                    }
-                }
-            }
-            if (Control.MouseButtons == MouseButtons.Left)
+        internal void Start()
+        {
+            if (_config.Disabled || _isActive)
             {
-                UpdateCursorWithMouse();
+                if (_isActive)
+                    _api.Log(API.LogType.Debug, "Plugin is already running. Start operation skipped.");
+                return;
             }
+
+            ActivatePlugin();
+        }
+
+        internal void Stop()
+        {
+            if (!_isActive) return;
+
+            DeactivatePlugin();
+        }
+
+        internal void ClearText()
+        {
+            _textBuffer = "";
+            _cursorPosition = 0;
+            _undoStack.Clear();
+            _redoStack.Clear();
+            UpdateDisplay();
+        }
+
+        internal void ShowContextForm()
+        {
+            if (!_isActive || _contextFormOpen) return;
+
+            _contextFocusForm = false;
+            _contextFormOpen = true;
+
+            _currentContextForm = new ContextForm(this, _config.BackgroundColor, _config.ButtonColor, _config.TextColor);
+            _currentContextForm.ShowDialog();
+        }
+
+        // Add method to close context form programmatically
+        public void CloseContextForm()
+        {
+            if (_contextFormOpen && _currentContextForm != null)
+            {
+                _currentContextForm.CloseForm();
+                _currentContextForm = null;
+                _contextFormOpen = false;
+                _contextFocusForm = true;
+            }
+        }
+        #endregion
+
+        #region Initialization
+        private void LoadConfiguration()
+        {
+            _config = new PluginConfig
+            {
+                MeterName = _api.ReadString("MeterName", ""),
+                InActiveValue = _api.ReadString("InActiveValue", ""),
+                FormatMultiline = _api.ReadInt("FormatMultiline", 0) == 1,
+                Disabled = _api.ReadInt("Disabled", 0) == 1,
+                Cursor = _api.ReadString("Cursor", DEFAULT_CURSOR),
+                IsPassword = _api.ReadInt("Password", 0) == 1,
+                IsMultiline = _api.ReadInt("Multiline", 0) == 1,
+                CharacterLimit = _api.ReadInt("InputLimit", 0),
+                OnEnterAction = _api.ReadString("OnEnterAction", "").Trim(),
+                OnESCAction = _api.ReadString("OnESCAction", "").Trim(),
+                DefaultValue = _api.ReadString("DefaultValue", "").Trim(),
+                Width = _api.ReadInt("ViewLimit", 0),
+                UnFocusDismiss = _api.ReadInt("UnFocusDismiss", 0) == 1,
+                DismissAction = _api.ReadString("OnDismissAction", ""),
+                EnableInActiveValue = _api.ReadInt("SetInActiveValue", 0) == 1,
+                UseRegex = _api.ReadInt("RegExpSubstitute", 0) == 1,
+                SubstituteRule = _api.ReadString("Substitute", ""),
+                ShowErrorForm = _api.ReadInt("ShowErrorDialog", 0) == 1,
+                ForceValidInput = _api.ReadInt("ForceValidInput", 0) == 1,
+                UnValidAction = _api.ReadString("OnInvalidAction", ""),
+                InputType = _api.ReadString("InputType", "String").Trim().ToLowerInvariant(),
+                AllowedCharacters = _api.ReadString("AllowedCharacters", ""),
+
+                // Meter positioning
+                MeterX = _api.ReadInt("MeterX", 0),
+                MeterY = _api.ReadInt("MeterY", 0),
+                MeterWidth = _api.ReadInt("MeterW", 0),
+                MeterHeight = _api.ReadInt("MeterH", 0),
+
+                // Skin positioning
+                SkinX = int.Parse(_api.ReplaceVariables("#CURRENTCONFIGX#")),
+                SkinY = int.Parse(_api.ReplaceVariables("#CURRENTCONFIGY#")),
+
+                // Colors
+                BackgroundColor = ParseColor(_api.ReadString("FormBackgroundColor", "30,30,30"), Color.FromArgb(30, 30, 30)),
+                ButtonColor = ParseColor(_api.ReadString("FormButtonColor", "70,70,70"), Color.FromArgb(70, 70, 70)),
+                TextColor = ParseColor(_api.ReadString("FormTextColor", "255,255,255"), Color.White)
+            };
+
+            ValidateInputType();
+        }
+
+        private void InitializeComponents()
+        {
+            _validator = new InputValidator(_config, _api);
+            _textProcessor = new TextProcessor(_config, _api);
+            _cursorManager = new CursorManager(_config);
+        }
+
+        private void InitializeTimers()
+        {
+            _updateTimer = new System.Timers.Timer(UPDATE_INTERVAL)
+            {
+                AutoReset = true
+            };
+            _updateTimer.Elapsed += (sender, e) => UpdatePosition();
+        }
+
+        private void InitializeTextBuffer()
+        {
+            _textBuffer = _config.CharacterLimit > 0 && _config.DefaultValue.Length > _config.CharacterLimit
+                ? _config.DefaultValue.Substring(0, _config.CharacterLimit)
+                : _config.DefaultValue;
+
+            _cursorPosition = _textBuffer.Length;
+        }
+
+        private void ValidateInputType()
+        {
+            var validTypes = new[] { "string", "integer", "float", "letters", "alphanumeric", "hexadecimal", "email", "custom" };
+
+            if (!validTypes.Contains(_config.InputType))
+            {
+                _api.Log(API.LogType.Warning, $"Invalid InputType '{_config.InputType}', defaulting to 'string'.");
+                _config.InputType = "string";
+            }
+
+            if (_config.InputType == "custom" && string.IsNullOrEmpty(_config.AllowedCharacters))
+            {
+                _api.Log(API.LogType.Warning, "InputType 'custom' requires 'AllowedCharacters'. Defaulting to 'string'.");
+                _config.InputType = "string";
+            }
+        }
+
+        private void ValidateAndAdjustTextBuffer()
+        {
+            if (_config.CharacterLimit > 0 && _textBuffer.Length > _config.CharacterLimit)
+            {
+                _textBuffer = _textBuffer.Substring(0, _config.CharacterLimit);
+                _cursorPosition = Math.Min(_cursorPosition, _config.CharacterLimit);
+            }
+
+            _cursorPosition = Math.Max(0, Math.Min(_cursorPosition, _textBuffer.Length));
+        }
+        #endregion
+
+        #region Plugin State Management
+        private void ActivatePlugin()
+        {
+            if (_config.UnFocusDismiss)
+                _contextFocusForm = true;
+
+            _isActive = true;
+            _hasResetOnce = false;
+            _cursorPosition = _textBuffer.Length;
+            _updateTimer.Start();
+
+            ScheduleReset();
+        }
+
+        private void DeactivatePlugin()
+        {
+            _isActive = false;
+            _hasResetOnce = false;
+            _resetOnce = false;
+            _cursorPosition = 0;
+            _undoStack.Clear();
+            _redoStack.Clear();
+            _updateTimer.Stop();
+
+            // Close any open context form
+            CloseContextForm();
+        }
+
+        private void ScheduleReset()
+        {
+            if (_hasResetOnce) return;
+
+            _hasResetOnce = true;
+            _resetTimer = new System.Timers.Timer(RESET_TIMER_DELAY)
+            {
+                AutoReset = false
+            };
+            _resetTimer.Elapsed += (sender, e) =>
+            {
+                ResetToDefaultValue();
+                _resetTimer.Stop();
+            };
+            _resetTimer.Start();
+        }
+
+        private void ResetToDefaultValue()
+        {
+            _textBuffer = _config.DefaultValue;
+            _cursorPosition = _textBuffer.Length;
+            _undoStack.Clear();
+            _redoStack.Clear();
+            _resetOnce = true;
+            UpdateDisplay();
+        }
+        #endregion
+
+        #region Input Handling
+        private void HandleMouseInput()
+        {
+            var mouseButtons = Control.MouseButtons;
+            if (mouseButtons != MouseButtons.Left && mouseButtons != MouseButtons.Right)
+                return;
+
+            var mousePosition = GetMousePosition();
+            var isInsideMeter = IsMouseInsideMeter(mousePosition);
+
+            if (isInsideMeter)
+            {
+                if (mouseButtons == MouseButtons.Right)
+                    ShowContextForm();
+                else if (mouseButtons == MouseButtons.Left)
+                    UpdateCursorWithMouse(mousePosition);
+            }
+            else if (_config.UnFocusDismiss && _isActive && _contextFocusForm)
+            {
+                HandleUnFocusDismiss();
+            }
+        }
+
+        private void HandleKeyboardInput()
+        {
             bool ctrlPressed = (GetAsyncKeyState(17) & 0x8000) != 0;
             bool shiftPressed = (GetAsyncKeyState(16) & 0x8000) != 0;
-            CapsLockActive = (GetKeyState(20) & 0x0001) != 0;
+            bool capsLockActive = (GetKeyState(20) & 0x0001) != 0;
 
             for (int i = 8; i <= 255; i++)
             {
-                if ((GetAsyncKeyState(i) & 0x0001) != 0)
+                if ((GetAsyncKeyState(i) & 0x0001) == 0) continue;
+
+                if (i == 13 && ctrlPressed)
                 {
-                    if (i == 13 && ctrlPressed)
-                    {
-                        HandleCtrlEnter();
-                        return;
-                    }
-
-                    if (ctrlPressed)
-                    {
-                        HandleCtrlShortcuts(i);
-                    }
-                    else
-                    {
-                        HandleSpecialKeys(i, shiftPressed, ctrlPressed);
-                    }
-
-                    UpdateText();
+                    HandleCtrlEnter();
+                    return;
                 }
+
+                if (ctrlPressed)
+                    HandleCtrlShortcuts(i);
+                else
+                    HandleSpecialKeys(i, shiftPressed, ctrlPressed);
+
+                UpdateDisplay();
+                break;
             }
         }
+        #endregion
 
-        //=================================================================================================================================//
-        //                                                      KeyBoardControl                                                            //
-        //=================================================================================================================================//
+        #region Keyboard Shortcuts and Special Keys
         private void HandleCtrlShortcuts(int keyCode)
         {
             switch (keyCode)
             {
-                case 67:
-                    CopyToClipboard();
-                    break;
-                case 86:
-                    PasteFromClipboard();
-                    break;
-                case 88:
-                    CutToClipboard();
-                    break;
-                case 90:
-                    Undo();
-                    break;
-                case 89:
-                    Redo();
-                    break;
+                case 67: CopyToClipboard(); break;      // Ctrl+C
+                case 86: PasteFromClipboard(); break;   // Ctrl+V
+                case 88: CutToClipboard(); break;       // Ctrl+X
+                case 90: Undo(); break;                 // Ctrl+Z
+                case 89: Redo(); break;                 // Ctrl+Y
             }
         }
 
@@ -315,456 +393,379 @@ namespace PluginBlurInput
 
             switch (keyCode)
             {
-                case 8:
-                    if (CursorPosition > 0)
-                    {
-                        TextBuffer = TextBuffer.Remove(CursorPosition - 1, 1);
-                        CursorPosition--;
-                    }
-                    return;
-
-                case 27:
-                    ESCHandler();
-                    return;
-
-                case 13:
-                    if (IsMultiline && !ctrlPressed)
-                    {
-                        InsertText("\n");
-                    }
-                    else
-                    {
-                        ValidateTextBuffer(InputType);
-                    }
-                    return;
-
-                case 46:
-                    if (CursorPosition < TextBuffer.Length)
-                    {
-                        TextBuffer = TextBuffer.Remove(CursorPosition, 1);
-                    }
-                    return;
-
-                case 37:
-                    if (CursorPosition > 0)
-                        CursorPosition--;
-                    return;
-
-                case 39:
-                    if (CursorPosition < TextBuffer.Length)
-                        CursorPosition++;
-                    return;
-
-                case 36:
-                    CursorPosition = 0;
-                    return;
-
-                case 35:
-                    CursorPosition = TextBuffer.Length;
-                    return;
-
-                case 9:
-                    TextBuffer = TextBuffer.Insert(CursorPosition, TabSpaces);
-                    CursorPosition += TabSpaces.Length;
-                    return;
-
-                case 20:
-                    CapsLockActive = !CapsLockActive;
-                    return;
-
-                case 38:
-                    if (IsMultiline)
-                    {
-                        MoveCursorUp();
-                    }
-                    else
-                    {
-                        NavigateHistory(-1);
-                    }
-                    return;
-
-                case 40:
-                    if (IsMultiline)
-                    {
-                        MoveCursorDown();
-                    }
-                    else
-                    {
-                        NavigateHistory(1);
-                    }
-                    return;
-            }
-
-            char keyChar = MapKeyToCharacterDynamic(keyCode);
-
-            if (keyChar != '\0')
-            {
-                if (IsValidInput(keyChar))
-                {
-                    InsertText(keyChar.ToString());
-                }
+                case 8: HandleBackspace(); break;
+                case 27: HandleEscape(); break;
+                case 13: HandleEnter(ctrlPressed); break;
+                case 46: HandleDelete(); break;
+                case 37: HandleLeftArrow(); break;
+                case 39: HandleRightArrow(); break;
+                case 36: HandleHome(); break;
+                case 35: HandleEnd(); break;
+                case 9: HandleTab(); break;
+                case 20: /* CapsLock - handled elsewhere */ break;
+                case 38: HandleUpArrow(); break;
+                case 40: HandleDownArrow(); break;
+                default: HandleCharacterInput(keyCode); break;
             }
         }
 
-        private char MapKeyToCharacterDynamic(int keyCode)
+        private void HandleBackspace()
         {
-            StringBuilder result = new StringBuilder(2);
-
-            byte[] keyboardState = new byte[256];
-            if (!GetKeyboardState(keyboardState))
+            if (_cursorPosition > 0)
             {
-                return '\0';
-            }
-
-            int charsWritten = ToUnicode(
-                (uint)keyCode,
-                0,
-                keyboardState,
-                result,
-                result.Capacity,
-                0
-            );
-
-            if (charsWritten == 1)
-            {
-                return result[0];
-            }
-
-            return '\0';
-        }
-
-        private void MoveCursorUp()
-        {
-            try
-            {
-                if (CursorPosition == 0)
-                {
-                 //   LogError("MoveCursorUp() called, but CursorPosition is already 0.");
-                    return;
-                }
-
-                // Find the start of the current line
-                int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
-              //  LogError($"CursorPosition: {CursorPosition}, CurrentLineStart: {currentLineStart}");
-
-                if (currentLineStart == -1)
-                {
-                    CursorPosition = 0;
-                   // LogError("No previous line found. Cursor moved to 0.");
-                    return;
-                }
-
-                // Find the start of the previous line
-                int previousLineStart = TextBuffer.LastIndexOf('\n', currentLineStart - 1);
-               // LogError($"PreviousLineStart: {previousLineStart}");
-
-                if (previousLineStart == -1)
-                {
-                    CursorPosition = 0;
-                    //LogError("Previous line does not exist. Cursor moved to 0.");
-                    return;
-                }
-
-                // Find offset within the current line
-                int lineOffset = CursorPosition - (currentLineStart + 1);
-              //  LogError($"LineOffset: {lineOffset}");
-
-                // Move cursor safely
-                CursorPosition = Math.Min(previousLineStart + 1 + lineOffset, currentLineStart);
-               // LogError($"Cursor moved up to {CursorPosition}");
-            }
-            catch (Exception ex)
-            {
-              //  LogError($"Exception in MoveCursorUp: {ex.Message}\n{ex.StackTrace}");
+                _textBuffer = _textBuffer.Remove(_cursorPosition - 1, 1);
+                _cursorPosition--;
             }
         }
 
-        private void LogError(string message)
+        private void HandleEscape()
         {
-            try
-            {
-                string tempPath = Path.Combine(Path.GetTempPath(), "Rainmeter_ErrorLog.txt");
-                string logMessage = $"{DateTime.Now}: {message}\n";
-                File.AppendAllText(tempPath, logMessage);
-            }
-            catch
-            {
-                // If logging fails, avoid crashing the program.
-            }
+            HandleESC();
         }
 
-
-
-        private void MoveCursorDown()
+        private void HandleEnter(bool ctrlPressed)
         {
-            try
-            {
-                if (CursorPosition >= TextBuffer.Length)
-                {
-                   // LogError("MoveCursorDown() called, but CursorPosition is already at the end.");
-                    return; // Already at the last position
-                }
-
-                // Find the start of the current line
-                int currentLineStart = TextBuffer.LastIndexOf('\n', CursorPosition - 1);
-                if (currentLineStart == -1)
-                {
-                    currentLineStart = -1; // Special case: first line
-                }
-
-                // Find the end of the current line
-                int currentLineEnd = TextBuffer.IndexOf('\n', CursorPosition);
-                if (currentLineEnd == -1)
-                {
-                  //  LogError("No next line exists. Cursor does not move.");
-                    return; // No next line exists
-                }
-
-                // If the cursor is at position 0 and the first line is empty, move directly to the second line
-                if (CursorPosition == 0 && currentLineEnd == 0)
-                {
-                    CursorPosition = 1;
-                   // LogError($"Cursor was at position 0 on an empty line, moved to {CursorPosition}");
-                    return;
-                }
-
-                // Find the start of the next line
-                int nextLineStart = currentLineEnd + 1;
-                if (nextLineStart >= TextBuffer.Length)
-                {
-                   // LogError("Next line start is at or beyond the text length. Cursor does not move.");
-                    return;
-                }
-
-                // Find the end of the next line
-                int nextLineEnd = TextBuffer.IndexOf('\n', nextLineStart);
-                if (nextLineEnd == -1)
-                {
-                    nextLineEnd = TextBuffer.Length;
-                }
-
-                // Compute cursor offset in the current line
-                int lineOffset = CursorPosition - (currentLineStart + 1);
-
-                // Move cursor to the next line with the same column offset (or as close as possible)
-                CursorPosition = Math.Min(nextLineStart + lineOffset, nextLineEnd);
-               // LogError($"Cursor moved down to {CursorPosition}");
-           }
-            catch (Exception ex)
-            {
-                //LogError($"Exception in MoveCursorDown: {ex.Message}\n{ex.StackTrace}");
-            }
-        }
-
-
-        private void NavigateHistory(int direction)
-        {
-            if (HistoryStack == null || HistoryStack.Count == 0)
-                return;
-
-            if (direction < 0)
-            {
-                if (HistoryIndex > 0)
-                {
-                    HistoryIndex--;
-                    TextBuffer = HistoryStack[HistoryIndex];
-                    CursorPosition = TextBuffer.Length;
-                    UpdateText();
-                }
-            }
-            else if (direction > 0)
-            {
-                if (HistoryIndex < HistoryStack.Count - 1)
-                {
-                    HistoryIndex++;
-                    TextBuffer = HistoryStack[HistoryIndex];
-                    CursorPosition = TextBuffer.Length;
-                    UpdateText();
-                }
-                else if (HistoryIndex == HistoryStack.Count - 1)
-                {
-                    HistoryIndex++;
-                    TextBuffer = string.Empty;
-                    CursorPosition = 0;
-                    UpdateText();
-                }
-            }
-        }
-
-        /*private void AddToHistory(string command)
-        {
-            if (!string.IsNullOrWhiteSpace(command))
-            {
-                HistoryStack.Add(command);
-                if (HistoryStack.Count > 100) // Limit history size
-                {
-                    HistoryStack.RemoveAt(0);
-                }
-                HistoryIndex = HistoryStack.Count; // Reset index
-            }
-        }
-        */
-        //=================================================================================================================================//
-        //                                                      KeyBoard Functions                                                         //
-        //=================================================================================================================================//
-
-        public void ESCHandler()
-        {
-            if (!IsActive)
-                return;
-            IsActive = false;
-            hasResetOnce = false;
-            ResetOnce = false;
-            Api.Execute(OnESCAction);
-            TextBuffer = defaultValue;
-            CursorPosition = 0;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            updateTimer.Stop();
-            UpdateMeter();
-        }
-
-        public void UpdateMeter()
-        {
-            if (!string.IsNullOrEmpty(MeterName))
-            {
-                if (EnableInActiveValue == 1)
-                {
-                    Api.Execute($"!SetOption  \"{MeterName}\" Text \"\"\"{InActiveValue}\"\"\" ");
-                }
-                else
-                {
-                    Api.Execute($"!SetOption  \"{MeterName}\" Text \"\"\"{TextBuffer}\"\"\" ");
-                }
-
-                Api.Execute($"!UpdateMeter  \"{MeterName}\" ");
-                Api.Execute($"!Redraw");
-            }
-        }
-
-        private void UpdateMeasure()
-        {
-            if (!IsActive || string.IsNullOrEmpty(MeterName))
-                return;
-
-            UpdateMeter();
-            if (EnableInActiveValue == 1)
-            {
-                Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"\" ");
-            }
+            if (_config.IsMultiline && !ctrlPressed)
+                InsertText("\n");
             else
+                _validator.ValidateTextBuffer(_textBuffer, _config.InputType, this);
+        }
+
+        private void HandleDelete()
+        {
+            if (_cursorPosition < _textBuffer.Length)
+                _textBuffer = _textBuffer.Remove(_cursorPosition, 1);
+        }
+
+        private void HandleLeftArrow()
+        {
+            if (_cursorPosition > 0)
             {
-                Api.Execute($"!SetOption  \"{myName}\" DefaultValue \"\"\"{TextBuffer}\"\"\" ");
+                _cursorPosition--;
+                _cursorManager.ResetPreferredColumn();
             }
-                
-            Api.Execute($"!UpdateMeasure  \"{myName}\" ");
         }
 
-        public void DismissHandler()
+        private void HandleRightArrow()
         {
-            if (!IsActive)
-                return;
-
-            IsActive = false;
-            hasResetOnce = false;
-            ResetOnce = false;
-            Api.Execute(UnValidAction);
-            TextBuffer = defaultValue;
-            CursorPosition = 0;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            updateTimer.Stop();
-            UpdateMeter();
+            if (_cursorPosition < _textBuffer.Length)
+            {
+                _cursorPosition++;
+                _cursorManager.ResetPreferredColumn();
+            }
         }
 
-        public void UnFocusDismissHandler()
+        private void HandleHome()
         {
-            if (!IsActive)
-                return;
-            IsActive = false;
-            hasResetOnce = false;
-            ResetOnce = false;
-            Api.Execute(DismissAction);
-            TextBuffer = defaultValue;
-            CursorPosition = 0;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            updateTimer.Stop();
-            UpdateMeter();
+            _cursorPosition = 0;
+            _cursorManager.ResetPreferredColumn();
+        }
+
+        private void HandleEnd()
+        {
+            _cursorPosition = _textBuffer.Length;
+            _cursorManager.ResetPreferredColumn();
+        }
+
+        private void HandleTab()
+        {
+            InsertText(TAB_SPACES);
+        }
+
+        private void HandleUpArrow()
+        {
+            if (_config.IsMultiline)
+                _cursorManager.MoveCursorUp(ref _cursorPosition, _textBuffer);
+            else
+                NavigateHistory(-1);
+        }
+
+        private void HandleDownArrow()
+        {
+            if (_config.IsMultiline)
+                _cursorManager.MoveCursorDown(ref _cursorPosition, _textBuffer);
+            else
+                NavigateHistory(1);
+        }
+
+        private void HandleCharacterInput(int keyCode)
+        {
+            char keyChar = MapKeyToCharacterDynamic(keyCode);
+            if (keyChar != '\0' && _validator.IsValidInput(keyChar, _config.InputType, _cursorPosition))
+            {
+                InsertText(keyChar.ToString());
+            }
         }
 
         private void HandleCtrlEnter()
         {
-            ValidateTextBuffer(InputType);
+            _validator.ValidateTextBuffer(_textBuffer, _config.InputType, this);
+        }
+        #endregion
+
+        #region Event Handlers
+        public void HandleESC()
+        {
+            if (!_isActive) return;
+
+            // First check if context menu is open and close it
+            if (_contextFormOpen)
+            {
+                CloseContextForm();
+                return;
+            }
+
+            // If no context menu is open, proceed with normal ESC behavior
+            DeactivatePlugin();
+            _api.Execute(_config.OnESCAction);
+            ResetToDefault();
+            UpdateMeter();
         }
 
+        public void HandleDismiss()
+        {
+            if (!_isActive) return;
+
+            DeactivatePlugin();
+            _api.Execute(_config.UnValidAction);
+            ResetToDefault();
+            UpdateMeter();
+        }
+
+        public void HandleUnFocusDismiss()
+        {
+            if (!_isActive) return;
+
+            DeactivatePlugin();
+            _api.Execute(_config.DismissAction);
+            ResetToDefault();
+            UpdateMeter();
+        }
+
+        public void HandleValidInput()
+        {
+            _textProcessor.ConvertTextBufferToSingleLine(ref _textBuffer, _config.FormatMultiline);
+            UpdateMeasure();
+            _api.Execute(_config.OnEnterAction);
+            Stop();
+        }
+
+        public void ShowError(string errorMessage)
+        {
+            if (_config.ShowErrorForm)
+            {
+                var errorForm = new ErrorForm(errorMessage, _config.BackgroundColor, _config.ButtonColor, _config.TextColor);
+                errorForm.ShowDialog();
+            }
+            else
+            {
+                _api.Log(API.LogType.Error, errorMessage);
+            }
+        }
+
+        private void ResetToDefault()
+        {
+            _textBuffer = _config.DefaultValue;
+            _cursorPosition = 0;
+            _undoStack.Clear();
+            _redoStack.Clear();
+        }
+        #endregion
+
+        #region Clipboard Operations
         internal void CopyToClipboard()
         {
-            if (!string.IsNullOrEmpty(TextBuffer))
-            {
-                Clipboard.SetText(TextBuffer);
-            }
+            if (!string.IsNullOrEmpty(_textBuffer))
+                Clipboard.SetText(_textBuffer);
         }
 
         internal void PasteFromClipboard()
         {
-            if (Clipboard.ContainsText())
-            {
-                SaveStateForUndo();
-                string clipboardText = Clipboard.GetText();
-                InsertText(clipboardText.Trim());
-                UpdateText();
-            }
-            else
-            {
-                Api.Log(API.LogType.Warning, "Clipboard does not contain text.");
-            }
+            if (!Clipboard.ContainsText()) return;
+
+            SaveStateForUndo();
+            string clipboardText = Clipboard.GetText();
+            InsertText(clipboardText.Trim());
+            UpdateDisplay();
         }
 
         internal void CutToClipboard()
         {
-            if (!string.IsNullOrEmpty(TextBuffer))
-            {
-                Clipboard.SetText(TextBuffer);
-                SaveStateForUndo();
-                TextBuffer = "";
-                CursorPosition = 0;
-                UpdateText();
-            }
-        }
+            if (string.IsNullOrEmpty(_textBuffer)) return;
 
+            Clipboard.SetText(_textBuffer);
+            SaveStateForUndo();
+            _textBuffer = "";
+            _cursorPosition = 0;
+            UpdateDisplay();
+        }
+        #endregion
+
+        #region Undo/Redo Operations
         internal void Undo()
         {
-            if (UndoStack.Count > 0)
-            {
-                RedoStack.Push(TextBuffer);
-                TextBuffer = UndoStack.Pop();
-                CursorPosition = TextBuffer.Length;
-                UpdateText();
-            }
+            if (_undoStack.Count == 0) return;
+
+            _redoStack.Push(_textBuffer);
+            _textBuffer = _undoStack.Pop();
+            _cursorPosition = _textBuffer.Length;
+            UpdateDisplay();
         }
 
         internal void Redo()
         {
-            if (RedoStack.Count > 0)
-            {
-                UndoStack.Push(TextBuffer);
-                TextBuffer = RedoStack.Pop();
-                CursorPosition = TextBuffer.Length;
-                UpdateText();
-            }
+            if (_redoStack.Count == 0) return;
+
+            _undoStack.Push(_textBuffer);
+            _textBuffer = _redoStack.Pop();
+            _cursorPosition = _textBuffer.Length;
+            UpdateDisplay();
         }
 
         internal void SaveStateForUndo()
         {
-            UndoStack.Push(TextBuffer);
-            RedoStack.Clear();
-            UpdateText();
+            _undoStack.Push(_textBuffer);
+            _redoStack.Clear();
+        }
+        #endregion
+
+        #region History Navigation
+        private void NavigateHistory(int direction)
+        {
+            if (_historyStack.Count == 0) return;
+
+            if (direction < 0 && _historyIndex > 0)
+            {
+                _historyIndex--;
+                _textBuffer = _historyStack[_historyIndex];
+            }
+            else if (direction > 0)
+            {
+                if (_historyIndex < _historyStack.Count - 1)
+                {
+                    _historyIndex++;
+                    _textBuffer = _historyStack[_historyIndex];
+                }
+                else if (_historyIndex == _historyStack.Count - 1)
+                {
+                    _historyIndex++;
+                    _textBuffer = "";
+                }
+            }
+
+            _cursorPosition = _textBuffer.Length;
+            UpdateDisplay();
+        }
+        #endregion
+
+        #region Display Updates
+        private void UpdateDisplay()
+        {
+            if (!_isActive || string.IsNullOrEmpty(_config.MeterName) || !_resetOnce)
+                return;
+
+            _cursorPosition = Math.Max(0, Math.Min(_cursorPosition, _textBuffer.Length));
+
+            string displayText = _textProcessor.PrepareDisplayText(_textBuffer, _cursorPosition, _config);
+
+            if (_config.Width > 0 && displayText.Length > _config.Width)
+            {
+                displayText = _textProcessor.TruncateForDisplay(displayText, _cursorPosition, _config.Width);
+            }
+
+            _api.Execute($"!SetOption {_config.MeterName} Text \"\"\"{displayText}\"\"\"");
+            _api.Execute($"!UpdateMeter \"{_config.MeterName}\"");
+            _api.Execute("!Redraw");
         }
 
-        //=================================================================================================================================//
-        //                                                     CommonFunctions                                                             //
-        //=================================================================================================================================//
+        public void UpdateMeter()
+        {
+            if (string.IsNullOrEmpty(_config.MeterName)) return;
+
+            string text = _config.EnableInActiveValue ? _config.InActiveValue : _textBuffer;
+            _api.Execute($"!SetOption \"{_config.MeterName}\" Text \"\"\"{text}\"\"\"");
+            _api.Execute($"!UpdateMeter \"{_config.MeterName}\"");
+            _api.Execute("!Redraw");
+        }
+
+        private void UpdateMeasure()
+        {
+            if (!_isActive || string.IsNullOrEmpty(_config.MeterName)) return;
+
+            UpdateMeter();
+
+            string defaultValue = _config.EnableInActiveValue ? "" : _textBuffer;
+            _api.Execute($"!SetOption \"{MyName}\" DefaultValue \"\"\"{defaultValue}\"\"\"");
+            _api.Execute($"!UpdateMeasure \"{MyName}\"");
+        }
+
+        private void UpdatePosition()
+        {
+            if (!_isActive) return;
+
+            _api.Execute($"!SetOption \"{MyName}\" MeterX \"[{_config.MeterName}:X]\"");
+            _api.Execute($"!SetOption \"{MyName}\" MeterY \"[{_config.MeterName}:Y]\"");
+            _api.Execute($"!SetOption \"{MyName}\" MeterW \"[{_config.MeterName}:W]\"");
+            _api.Execute($"!SetOption \"{MyName}\" MeterH \"[{_config.MeterName}:H]\"");
+            _api.Execute($"!UpdateMeasure \"{MyName}\"");
+        }
+        #endregion
+
+        #region Utility Methods
+        private void InsertText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+
+            if (_config.CharacterLimit > 0 && _textBuffer.Length + text.Length > _config.CharacterLimit)
+            {
+                text = text.Substring(0, _config.CharacterLimit - _textBuffer.Length);
+            }
+
+            _textBuffer = _textBuffer.Insert(_cursorPosition, text);
+            _cursorPosition = Math.Min(_textBuffer.Length, _cursorPosition + text.Length);
+
+            // Reset preferred column when text is inserted
+            _cursorManager.ResetPreferredColumn();
+        }
+
+        private char MapKeyToCharacterDynamic(int keyCode)
+        {
+            var result = new StringBuilder(2);
+            var keyboardState = new byte[256];
+
+            if (!GetKeyboardState(keyboardState))
+                return '\0';
+
+            int charsWritten = ToUnicode((uint)keyCode, 0, keyboardState, result, result.Capacity, 0);
+            return charsWritten == 1 ? result[0] : '\0';
+        }
+
+        private Point GetMousePosition() => Cursor.Position;
+
+        private bool IsMouseInsideMeter(Point mousePosition)
+        {
+            int meterGlobalX = _config.MeterX + _config.SkinX;
+            int meterGlobalY = _config.MeterY + _config.SkinY;
+
+            return mousePosition.X >= meterGlobalX &&
+                   mousePosition.X <= meterGlobalX + _config.MeterWidth &&
+                   mousePosition.Y >= meterGlobalY &&
+                   mousePosition.Y <= meterGlobalY + _config.MeterHeight;
+        }
+
+        private void UpdateCursorWithMouse(Point mousePosition)
+        {
+            if (!IsMouseInsideMeter(mousePosition)) return;
+
+            int relativeX = mousePosition.X - (_config.MeterX + _config.SkinX);
+            int relativeY = mousePosition.Y - (_config.MeterY + _config.SkinY);
+
+            _cursorPosition = _cursorManager.CalculateCursorPosition(_textBuffer, relativeX, relativeY,
+                _config.MeterWidth, _config.MeterHeight);
+
+            UpdateDisplay();
+        }
+
         private Color ParseColor(string colorString, Color defaultColor)
         {
             try
@@ -780,453 +781,406 @@ namespace PluginBlurInput
             }
             catch
             {
-                Api.Log(
-                    Rainmeter.API.LogType.Warning,
-                    $"Invalid color format: '{colorString}'. Using default color."
-                );
+                _api.Log(API.LogType.Warning, $"Invalid color format: '{colorString}'. Using default color.");
             }
             return defaultColor;
         }
+        #endregion
+    }
 
-        private void InsertText(string text)
+    #region Helper Classes
+    internal class PluginConfig
+    {
+        public string MeterName { get; set; } = "";
+        public string InActiveValue { get; set; } = "";
+        public bool FormatMultiline { get; set; } = false;
+        public bool Disabled { get; set; } = false;
+        public string Cursor { get; set; } = "|";
+        public bool IsPassword { get; set; } = false;
+        public bool IsMultiline { get; set; } = false;
+        public int CharacterLimit { get; set; } = 0;
+        public string OnEnterAction { get; set; } = "";
+        public string OnESCAction { get; set; } = "";
+        public string DefaultValue { get; set; } = "";
+        public int Width { get; set; } = 0;
+        public bool UnFocusDismiss { get; set; } = false;
+        public string DismissAction { get; set; } = "";
+        public bool EnableInActiveValue { get; set; } = false;
+        public bool UseRegex { get; set; } = false;
+        public string SubstituteRule { get; set; } = "";
+        public bool ShowErrorForm { get; set; } = false;
+        public bool ForceValidInput { get; set; } = false;
+        public string UnValidAction { get; set; } = "";
+        public string InputType { get; set; } = "string";
+        public string AllowedCharacters { get; set; } = "";
+
+        // Positioning
+        public int MeterX { get; set; } = 0;
+        public int MeterY { get; set; } = 0;
+        public int MeterWidth { get; set; } = 0;
+        public int MeterHeight { get; set; } = 0;
+        public int SkinX { get; set; } = 0;
+        public int SkinY { get; set; } = 0;
+
+        // Colors
+        public Color BackgroundColor { get; set; } = Color.FromArgb(30, 30, 30);
+        public Color ButtonColor { get; set; } = Color.FromArgb(70, 70, 70);
+        public Color TextColor { get; set; } = Color.White;
+    }
+
+    internal class InputValidator
+    {
+        private readonly PluginConfig _config;
+        private readonly Rainmeter.API _api;
+
+        public InputValidator(PluginConfig config, Rainmeter.API api)
         {
-            if (string.IsNullOrEmpty(text))
-                return;
-            if (CharacterLimit > 0 && TextBuffer.Length + text.Length > CharacterLimit)
-            {
-                text = text.Substring(0, CharacterLimit - TextBuffer.Length);
-            }
-            TextBuffer = TextBuffer.Insert(CursorPosition, text);
-            CursorPosition = Math.Min(TextBuffer.Length, CursorPosition + text.Length);
+            _config = config;
+            _api = api;
         }
 
-        private void UpdateText()
+        public bool IsValidInput(char keyChar, string inputType, int cursorPosition)
         {
-            if (!IsActive || string.IsNullOrEmpty(MeterName))
-                return;
+            if (!_config.ForceValidInput) return true;
 
-            if (!ResetOnce)
-                return;
-
-            CursorPosition = Math.Max(0, Math.Min(CursorPosition, TextBuffer.Length));
-
-            string displayText;
-
-            if (IsPassword)
+            return inputType switch
             {
-                displayText = string.Concat(TextBuffer.Select(c => c == '\n' ? '\n' : '*'))
-                    .Insert(CursorPosition, Cursor);
+                "integer" => char.IsDigit(keyChar) || (keyChar == '-' && cursorPosition == 0),
+                "letters" => char.IsLetter(keyChar),
+                "float" => char.IsDigit(keyChar) || keyChar == '.' || (keyChar == '-' && cursorPosition == 0),
+                "alphanumeric" => char.IsLetterOrDigit(keyChar),
+                "hexadecimal" => char.IsDigit(keyChar) || (keyChar >= 'a' && keyChar <= 'f') || (keyChar >= 'A' && keyChar <= 'F'),
+                "custom" => !string.IsNullOrEmpty(_config.AllowedCharacters) && _config.AllowedCharacters.Contains(keyChar),
+                _ => true
+            };
+        }
+
+        public void ValidateTextBuffer(string textBuffer, string inputType, Measure measure)
+        {
+            bool isValid = inputType switch
+            {
+                "string" => true,
+                "integer" => string.IsNullOrWhiteSpace(textBuffer) || int.TryParse(textBuffer, out _),
+                "float" => string.IsNullOrWhiteSpace(textBuffer) || float.TryParse(textBuffer, out _),
+                "hexadecimal" => string.IsNullOrWhiteSpace(textBuffer) || Regex.IsMatch(textBuffer, @"\A\b(0[xX])?[0-9a-fA-F]+\b\Z"),
+                "email" => string.IsNullOrWhiteSpace(textBuffer) || Regex.IsMatch(textBuffer, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
+                "alphanumeric" => string.IsNullOrWhiteSpace(textBuffer) || Regex.IsMatch(textBuffer, @"^[a-zA-Z0-9]+$"),
+                "letters" => string.IsNullOrWhiteSpace(textBuffer) || Regex.IsMatch(textBuffer, @"^[a-zA-Z]+$"),
+                "custom" => ValidateCustom(textBuffer),
+                _ => true
+            };
+
+            if (!isValid)
+            {
+                measure.HandleDismiss();
+                measure.ShowError($"Input is not valid. Only {inputType} is allowed.");
             }
             else
             {
-                displayText = TextBuffer.Insert(CursorPosition, Cursor);
-            }
-
-            string substituteRule = Api.ReadString("Substitute", "");
-            if (!string.IsNullOrEmpty(substituteRule))
-            {
-                int originalLength = displayText.Length;
-                displayText = ApplySubstitution(displayText, substituteRule, useRegex);
-
-                int newLength = displayText.Length;
-                if (newLength != originalLength)
-                {
-                    int change = newLength - originalLength;
-                    CursorPosition = Math.Max(0, Math.Min(CursorPosition + change, newLength));
-                }
-            }
-
-            if (Width > 0 && displayText.Length > Width)
-            {
-                int startIndex = Math.Max(0, CursorPosition - Width / 2);
-                startIndex = Math.Min(startIndex, displayText.Length - Width);
-                displayText = displayText.Substring(startIndex, Width);
-            }
-
-            Api.Execute($"!SetOption  {MeterName} Text \"\"\"{displayText}\"\"\"");
-            Api.Execute($"!UpdateMeter \"{MeterName}\"");
-            Api.Execute("!Redraw");
-        }
-
-        private void UpdateCursorWithMouse()
-        {
-            if (!IsActive || string.IsNullOrEmpty(MeterName))
-                return;
-
-            Point mousePosition = GetMousePosition();
-
-            if (IsMouseInsideMeter(mousePosition))
-            {
-                int relativeX = mousePosition.X - (MeterX + SkinX);
-                int relativeY = mousePosition.Y - (MeterY + SkinY);
-
-                string[] lines = TextBuffer.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
-
-                int lineHeight = lines.Length > 0 ? MeterHeight / lines.Length : MeterHeight;
-
-                int clickedLine = relativeY / lineHeight;
-
-                clickedLine = Math.Max(0, Math.Min(clickedLine, lines.Length - 1));
-
-                string line = lines[clickedLine];
-
-                int maxLineLength = lines.Max(l => l.Length);
-                int charWidth = maxLineLength > 0 ? MeterWidth / maxLineLength : MeterWidth;
-
-                int charIndexInLine = charWidth > 0 ? relativeX / charWidth : 0;
-
-                charIndexInLine = Math.Max(0, Math.Min(charIndexInLine, line.Length));
-
-                int newCursorPosition = 0;
-                for (int i = 0; i < clickedLine; i++)
-                {
-                    newCursorPosition += lines[i].Length + 1;
-                }
-                newCursorPosition += charIndexInLine;
-
-                CursorPosition = Math.Max(0, Math.Min(newCursorPosition, TextBuffer.Length));
-
-                UpdateText();
+                _api.Log(API.LogType.Debug, $"TextBuffer is a valid {inputType}.");
+                measure.HandleValidInput();
             }
         }
 
-        private string ApplySubstitution(string text, string substituteRule, int useRegex = 1)
+        private bool ValidateCustom(string textBuffer)
         {
-            if (string.IsNullOrEmpty(substituteRule))
-                return text;
+            if (string.IsNullOrWhiteSpace(textBuffer)) return true;
+            if (string.IsNullOrEmpty(_config.AllowedCharacters))
+            {
+                _api.Log(API.LogType.Warning, "AllowedCharacters is empty. Custom validation cannot proceed.");
+                return false;
+            }
 
-            string[] rules = substituteRule.Split(
-                new[] { ',' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
+            string pattern = $"^[{Regex.Escape(_config.AllowedCharacters)}]+$";
+            return Regex.IsMatch(textBuffer, pattern);
+        }
+    }
+
+    internal class TextProcessor
+    {
+        private readonly PluginConfig _config;
+        private readonly Rainmeter.API _api;
+
+        public TextProcessor(PluginConfig config, Rainmeter.API api)
+        {
+            _config = config;
+            _api = api;
+        }
+
+        public string PrepareDisplayText(string textBuffer, int cursorPosition, PluginConfig config)
+        {
+            string displayText;
+
+            if (config.IsPassword)
+            {
+                displayText = string.Concat(textBuffer.Select(c => c == '\n' ? '\n' : '*'))
+                    .Insert(cursorPosition, config.Cursor);
+            }
+            else
+            {
+                displayText = textBuffer.Insert(cursorPosition, config.Cursor);
+            }
+
+            if (!string.IsNullOrEmpty(config.SubstituteRule))
+            {
+                displayText = ApplySubstitution(displayText, config.SubstituteRule, config.UseRegex);
+            }
+
+            return displayText;
+        }
+
+        public string TruncateForDisplay(string displayText, int cursorPosition, int width)
+        {
+            if (displayText.Length <= width) return displayText;
+
+            int startIndex = Math.Max(0, cursorPosition - width / 2);
+            startIndex = Math.Min(startIndex, displayText.Length - width);
+            return displayText.Substring(startIndex, width);
+        }
+
+        public void ConvertTextBufferToSingleLine(ref string textBuffer, bool formatMultiline)
+        {
+            if (!string.IsNullOrEmpty(textBuffer) && formatMultiline)
+            {
+                textBuffer = textBuffer.Replace("\r\n", " ").Replace("\n", " ");
+            }
+        }
+
+        private string ApplySubstitution(string text, string substituteRule, bool useRegex)
+        {
+            if (string.IsNullOrEmpty(substituteRule)) return text;
+
+            string[] rules = substituteRule.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
             foreach (string rule in rules)
             {
-                if (TryParseRule(rule, out string pattern, out string replacement))
-                {
-                    if (string.IsNullOrEmpty(pattern))
-                    {
-                        Api.Log(
-                            API.LogType.Warning,
-                            $"Skipping substitution rule with empty pattern: {rule}"
-                        );
-                        continue;
-                    }
+                if (!TryParseRule(rule, out string pattern, out string replacement))
+                    continue;
 
-                    try
+                if (string.IsNullOrEmpty(pattern))
+                {
+                    _api.Log(API.LogType.Warning, $"Skipping substitution rule with empty pattern: {rule}");
+                    continue;
+                }
+
+                try
+                {
+                    if (useRegex)
                     {
-                        if (useRegex == 1)
-                        {
-                            Regex.Match("", pattern);
-                            text = Regex.Replace(text, pattern, replacement);
-                        }
-                        else
-                        {
-                            text = text.Replace(pattern, replacement);
-                        }
+                        Regex.Match("", pattern); // Validate regex
+                        text = Regex.Replace(text, pattern, replacement);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Api.Log(API.LogType.Error, $"Failed to apply rule: {rule}. {ex.Message}");
+                        text = text.Replace(pattern, replacement);
                     }
                 }
-                /* else
-                 {
-                     Api.Log(API.LogType.Warning, $"Invalid rule format: {rule}");
-                 }*/
+                catch (Exception ex)
+                {
+                    _api.Log(API.LogType.Error, $"Failed to apply rule: {rule}. {ex.Message}");
+                }
             }
 
-            text = text.Replace("#CRLF#", "\n");
-
-            return text;
+            return text.Replace("#CRLF#", "\n");
         }
 
         private bool TryParseRule(string rule, out string pattern, out string replacement)
         {
-            string[] parts = rule.Split(
-                new[] { "\":\"", "\':'", "'\":\"", "'\':'" },
-                StringSplitOptions.None
-            );
+            var separators = new[] { "\":\"", "\':'", "'\":\"", "'\':'" };
+            string[] parts = rule.Split(separators, StringSplitOptions.None);
+
             if (parts.Length == 2)
             {
                 pattern = parts[0].Trim('\"', '\'');
                 replacement = parts[1].Trim('\"', '\'');
                 return true;
             }
+
             pattern = replacement = null;
             return false;
         }
+    }
 
-        //=================================================================================================================================//
-        //                                                     Bangs Functions                                                             //
-        //=================================================================================================================================//
+    internal class CursorManager
+    {
+        private readonly PluginConfig _config;
+        private int _preferredColumn = -1; // Remember the preferred column for vertical movement
 
-        internal void ClearText()
+        public CursorManager(PluginConfig config)
         {
-            TextBuffer = "";
-            CursorPosition = 0;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            UpdateText();
+            _config = config;
         }
 
-        internal void Start()
+        public void MoveCursorUp(ref int cursorPosition, string textBuffer)
         {
-            if (Disabled == 1)
-                return;
+            try
+            {
+                if (cursorPosition == 0) return;
 
-            if (IsActive)
-            {
-                Api.Log(API.LogType.Debug, "Plugin is already running. Start operation skipped.");
-                return;
-            }
-            if (UnFocusDismiss == 1)
-            {
-                ContextFocusForm = true;
-            }
-            IsActive = true;
-            hasResetOnce = false;
-            CursorPosition = TextBuffer.Length;
-            updateTimer.Start();
-
-            if (!hasResetOnce)
-            {
-                hasResetOnce = true;
-                resetTimer = new System.Timers.Timer(50);
-                resetTimer.Elapsed += (sender, e) =>
+                var lineInfo = GetLineInfo(textBuffer, cursorPosition);
+                if (lineInfo.LineIndex == 0)
                 {
-                    ResetToDefaultValue();
-                    resetTimer.Stop();
-                };
-                resetTimer.AutoReset = false;
-                resetTimer.Start();
-            }
-        }
-
-        // This is used to reset textbuffer to default value as
-        // the plugin why not listening when the plugin is Stop.
-        private void ResetToDefaultValue()
-        {
-            TextBuffer = defaultValue;
-            CursorPosition = TextBuffer.Length;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            ResetOnce = true;        
-            UpdateText();
-        }
-
-        internal void ShowContextForm()
-        {
-            if (!IsActive)
-                return;
-
-            if (ContextFormOpen)
-                return;
-
-            ContextFocusForm = false;
-            ContextFormOpen = true;
-            ContextForm contextForm = new ContextForm(
-                this,
-                BackgroundColor,
-                ButtonColor,
-                TextColor
-            );
-            contextForm.ShowDialog();
-        }
-
-        internal void Stop()
-        {
-            if (!IsActive)
-                return;
-
-            IsActive = false;
-            hasResetOnce = false;
-            ResetOnce = false;
-            CursorPosition = 0;
-            UndoStack.Clear();
-            RedoStack.Clear();
-            updateTimer.Stop();
-            updateTimer.Stop();
-        }
-
-        //=================================================================================================================================//
-        //                                                      ValidInputs                                                                //
-        //=================================================================================================================================//
-        private bool IsValidInput(char keyChar)
-        {
-            if (ForceValidInput == 1)
-            {
-                switch (InputType)
-                {
-                    case "integer":
-                        return char.IsDigit(keyChar) || (keyChar == '-' && CursorPosition == 0);
-                    case "letters":
-                        return char.IsLetter(keyChar);
-                    case "default":
-                        return true;
-                    default:
-                        return true;
-                }
-            }
-            else
-            {
-                return true;
-            }
-        }
-
-        private bool IsTextBufferString()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return true;
-        }
-
-        private bool IsTextBufferInteger()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return int.TryParse(TextBuffer, out _);
-        }
-
-        private bool IsTextBufferFloat()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return float.TryParse(TextBuffer, out _);
-        }
-
-        private bool IsTextBufferHexadecimal()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return Regex.IsMatch(TextBuffer, @"\A\b(0[xX])?[0-9a-fA-F]+\b\Z");
-        }
-
-        private bool IsTextBufferEmail()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return Regex.IsMatch(TextBuffer, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
-        }
-
-        private bool IsTextBufferAlphanumeric()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z0-9]+$");
-        }
-
-        private bool IsTextBufferLetters()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            return Regex.IsMatch(TextBuffer, @"^[a-zA-Z]+$");
-        }
-
-        private bool IsTextBufferCustom()
-        {
-            if (string.IsNullOrWhiteSpace(TextBuffer))
-                return true;
-
-            if (string.IsNullOrEmpty(AllowedCharacters))
-            {
-                Api.Log(
-                    API.LogType.Warning,
-                    "AllowedCharacters is empty. Custom validation cannot proceed."
-                );
-                return false;
-            }
-
-            string pattern = $"^[{Regex.Escape(AllowedCharacters)}]+$";
-            return Regex.IsMatch(TextBuffer, pattern);
-        }
-
-        private void ValidateTextBuffer(string inputType)
-        {
-            bool isValid = false;
-
-            switch (inputType)
-            {
-                case "string":
-                    isValid = IsTextBufferString();
-                    break;
-                case "integer":
-                    isValid = IsTextBufferInteger();
-                    break;
-                case "float":
-                    isValid = IsTextBufferFloat();
-                    break;
-                case "hexadecimal":
-                    isValid = IsTextBufferHexadecimal();
-                    break;
-                case "email":
-                    isValid = IsTextBufferEmail();
-                    break;
-                case "alphanumeric":
-                    isValid = IsTextBufferAlphanumeric();
-                    break;
-                case "letters":
-                    isValid = IsTextBufferLetters();
-                    break;
-                case "custom":
-                    isValid = IsTextBufferCustom();
-                    break;
-                default:
-                    Api.Log(
-                        API.LogType.Warning,
-                        $"Unknown InputType: {inputType}. Validation skipped."
-                    );
+                    cursorPosition = 0;
+                    _preferredColumn = 0;
                     return;
-            }
-
-            if (!isValid)
-            {
-                DismissHandler();
-                ShowError($"Input is not a valid.Only allow {inputType}.");
-            }
-            else
-            {
-                Api.Log(API.LogType.Debug, $"TextBuffer is a valid {inputType}.");
-                ConvertTextBufferToSingleLine();
-                UpdateMeasure();
-                Api.Execute(OnEnterAction);
-                Stop();
-            }
-        }
-
-        private void ShowError(string errorMessage)
-        {
-            if (ShowErrorForm == 1)
-            {
-                ErrorForm errorForm = new ErrorForm(
-                    errorMessage,
-                    BackgroundColor,
-                    ButtonColor,
-                    TextColor
-                );
-                errorForm.ShowDialog();
-            }
-            else
-            {
-                Api.Log(API.LogType.Error, errorMessage);
-            }
-        }
-
-        internal void ConvertTextBufferToSingleLine()
-        {
-            if (!string.IsNullOrEmpty(TextBuffer))
-            {
-                if (FormatMultiline == 1)
-                {
-                    TextBuffer = TextBuffer.Replace("\r\n", " ").Replace("\n", " ");
                 }
+
+                // Use preferred column if we have one, otherwise use current column
+                int targetColumn = _preferredColumn >= 0 ? _preferredColumn : lineInfo.ColumnIndex;
+
+                // Store the preferred column for subsequent moves
+                if (_preferredColumn < 0) _preferredColumn = lineInfo.ColumnIndex;
+
+                var previousLineInfo = GetLineInfoByIndex(textBuffer, lineInfo.LineIndex - 1);
+                int newColumn = Math.Min(targetColumn, previousLineInfo.Length);
+
+                cursorPosition = previousLineInfo.StartPosition + newColumn;
+            }
+            catch (Exception ex)
+            {
+                LogError($"Exception in MoveCursorUp: {ex.Message}");
+            }
+        }
+
+        public void MoveCursorDown(ref int cursorPosition, string textBuffer)
+        {
+            try
+            {
+                if (cursorPosition >= textBuffer.Length) return;
+
+                var lineInfo = GetLineInfo(textBuffer, cursorPosition);
+                var lines = GetAllLines(textBuffer);
+
+                if (lineInfo.LineIndex >= lines.Length - 1) return; // Already on last line
+
+                // Use preferred column if we have one, otherwise use current column
+                int targetColumn = _preferredColumn >= 0 ? _preferredColumn : lineInfo.ColumnIndex;
+
+                // Store the preferred column for subsequent moves
+                if (_preferredColumn < 0) _preferredColumn = lineInfo.ColumnIndex;
+
+                var nextLineInfo = GetLineInfoByIndex(textBuffer, lineInfo.LineIndex + 1);
+                int newColumn = Math.Min(targetColumn, nextLineInfo.Length);
+
+                cursorPosition = nextLineInfo.StartPosition + newColumn;
+            }
+            catch (Exception ex)
+            {
+                LogError($"Exception in MoveCursorDown: {ex.Message}");
+            }
+        }
+
+        public void ResetPreferredColumn()
+        {
+            _preferredColumn = -1;
+        }
+
+        private struct LineInfo
+        {
+            public int LineIndex;
+            public int StartPosition;
+            public int Length;
+            public int ColumnIndex;
+        }
+
+        private LineInfo GetLineInfo(string textBuffer, int cursorPosition)
+        {
+            var lines = GetAllLines(textBuffer);
+            int currentPos = 0;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                int lineEnd = currentPos + lines[i].Length;
+
+                if (cursorPosition >= currentPos && cursorPosition <= lineEnd)
+                {
+                    return new LineInfo
+                    {
+                        LineIndex = i,
+                        StartPosition = currentPos,
+                        Length = lines[i].Length,
+                        ColumnIndex = cursorPosition - currentPos
+                    };
+                }
+
+                currentPos = lineEnd + 1; // +1 for the newline character
+            }
+
+            // Fallback for edge cases
+            return new LineInfo
+            {
+                LineIndex = lines.Length - 1,
+                StartPosition = Math.Max(0, textBuffer.Length - (lines.LastOrDefault()?.Length ?? 0)),
+                Length = lines.LastOrDefault()?.Length ?? 0,
+                ColumnIndex = 0
+            };
+        }
+
+        private LineInfo GetLineInfoByIndex(string textBuffer, int lineIndex)
+        {
+            var lines = GetAllLines(textBuffer);
+            if (lineIndex < 0 || lineIndex >= lines.Length)
+            {
+                return new LineInfo { LineIndex = -1, StartPosition = 0, Length = 0, ColumnIndex = 0 };
+            }
+
+            int startPos = 0;
+            for (int i = 0; i < lineIndex; i++)
+            {
+                startPos += lines[i].Length + 1; // +1 for newline
+            }
+
+            return new LineInfo
+            {
+                LineIndex = lineIndex,
+                StartPosition = startPos,
+                Length = lines[lineIndex].Length,
+                ColumnIndex = 0
+            };
+        }
+
+        private string[] GetAllLines(string textBuffer)
+        {
+            if (string.IsNullOrEmpty(textBuffer)) return new string[] { "" };
+            return textBuffer.Split(new[] { '\n' }, StringSplitOptions.None);
+        }
+
+        public int CalculateCursorPosition(string textBuffer, int relativeX, int relativeY, int meterWidth, int meterHeight)
+        {
+            string[] lines = textBuffer.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
+            if (lines.Length == 0) return 0;
+
+            int lineHeight = meterHeight / lines.Length;
+            int clickedLine = Math.Max(0, Math.Min(relativeY / lineHeight, lines.Length - 1));
+
+            string line = lines[clickedLine];
+            int maxLineLength = lines.Max(l => l.Length);
+            int charWidth = maxLineLength > 0 ? meterWidth / maxLineLength : meterWidth;
+            int charIndexInLine = charWidth > 0 ? Math.Max(0, Math.Min(relativeX / charWidth, line.Length)) : 0;
+
+            int newCursorPosition = 0;
+            for (int i = 0; i < clickedLine; i++)
+            {
+                newCursorPosition += lines[i].Length + 1; // +1 for newline
+            }
+            newCursorPosition += charIndexInLine;
+
+            return Math.Max(0, Math.Min(newCursorPosition, textBuffer.Length));
+        }
+
+        private void LogError(string message)
+        {
+            try
+            {
+                string tempPath = Path.Combine(Path.GetTempPath(), "Rainmeter_ErrorLog.txt");
+                string logMessage = $"{DateTime.Now}: {message}\n";
+                File.AppendAllText(tempPath, logMessage);
+            }
+            catch
+            {
+                // Silently fail to avoid crashing
             }
         }
     }
+    #endregion
 }

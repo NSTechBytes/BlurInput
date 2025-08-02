@@ -1,100 +1,183 @@
-﻿using PluginBlurInput;
-using static System.Net.Mime.MediaTypeNames;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
-using System;
+using PluginBlurInput;
 
-public class ContextForm : Form
+namespace PluginBlurInput
 {
-    private readonly Measure _measure;
-
-    public ContextForm(Measure measure, Color backgroundColor, Color buttonColor, Color textColor)
+    public class ContextForm : Form
     {
-        _measure = measure;
+        #region Constants
+        private const int FORM_WIDTH = 200;
+        private const int FORM_HEIGHT = 350;
+        private const int BUTTON_WIDTH = 150;
+        private const int BUTTON_HEIGHT = 40;
+        private const int BUTTON_MARGIN = 50;
+        private const int FIRST_BUTTON_Y = 30;
+        #endregion
 
-        // Apply custom colors
-        BackColor = backgroundColor;
+        #region Fields
+        private readonly Measure _measure;
+        private readonly Color _backgroundColor;
+        private readonly Color _buttonColor;
+        private readonly Color _textColor;
+        #endregion
 
-        Text = "BlurInput Menu";
-        Size = new Size(200, 350);
-        FormBorderStyle = FormBorderStyle.None;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        ControlBox = false;
-        ShowInTaskbar = false;
-        StartPosition = FormStartPosition.Manual;
-
-        var cursorPosition = Cursor.Position;
-        Location = new Point(cursorPosition.X - (Size.Width / 2), cursorPosition.Y);
-
-        // Create buttons with custom colors
-        var undoButton = CreateStyledButton("Undo", new Point(30, 30), "\uE10E", buttonColor, textColor);
-        var redoButton = CreateStyledButton("Redo", new Point(30, 80), "\uE10D", buttonColor, textColor);
-        var copyButton = CreateStyledButton("Copy", new Point(30, 130), "\uE16F", buttonColor, textColor);
-        var pasteButton = CreateStyledButton("Paste", new Point(30, 180), "\uE16D", buttonColor, textColor);
-        var clearButton = CreateStyledButton("Clear Text", new Point(30, 230), "\uE107", buttonColor, textColor);
-        var cancelButton = CreateStyledButton("Cancel", new Point(30, 280), "\uE10A", buttonColor, textColor);
-
-        // Add button actions
-        undoButton.Click += (s, e) => { _measure.Undo(); Close(); };
-        redoButton.Click += (s, e) => { _measure.Redo(); Close(); };
-        copyButton.Click += (s, e) => { _measure.CopyToClipboard(); Close(); };
-        pasteButton.Click += (s, e) => { _measure.PasteFromClipboard(); Close(); };
-        clearButton.Click += (s, e) => { _measure.ClearText(); Close(); };
-        cancelButton.Click += (s, e) => { Close(); };
-
-        // Add buttons to the form
-        Controls.Add(undoButton);
-        Controls.Add(redoButton);
-        Controls.Add(copyButton);
-        Controls.Add(pasteButton);
-        Controls.Add(clearButton);
-        Controls.Add(cancelButton);
-    }
-
-   public Button CreateStyledButton(string text, Point location, string iconUnicode, Color buttonColor, Color textColor)
-    {
-        var button = new Button
+        #region Constructor
+        public ContextForm(Measure measure, Color backgroundColor, Color buttonColor, Color textColor)
         {
-            Text = $"{iconUnicode} {text}",
-            Font = new Font("Segoe UI Symbol", 10, FontStyle.Bold),
-            ForeColor = textColor,
-            BackColor = buttonColor,
-            FlatStyle = FlatStyle.Flat,
-            FlatAppearance = { BorderSize = 0 },
-            Location = location,
-            Size = new Size(150, 40),
-            Cursor = Cursors.Hand,
-            TextAlign = ContentAlignment.MiddleCenter
-        };
+            _measure = measure ?? throw new ArgumentNullException(nameof(measure));
+            _backgroundColor = backgroundColor;
+            _buttonColor = buttonColor;
+            _textColor = textColor;
 
-        return button;
-    }
-
-
-    protected override void OnFormClosing(FormClosingEventArgs e)
-    {
-        base.OnFormClosing(e);
-        _measure.ContextFocusForm = true;
-        _measure.ContextFormOpen = false;
-    }
-
-    protected override void OnDeactivate(EventArgs e)
-    {
-        base.OnDeactivate(e);
-
-
-        var mousePos = Cursor.Position;
-        var formRect = new Rectangle(Location, Size);
-
-        if (!formRect.Contains(mousePos))
-        {
-            _measure.ContextFocusForm = true;
-            _measure.ContextFormOpen = false;
-            Close();
+            InitializeForm();
+            SetupKeyHandling();
+            CreateButtons();
+            CenterFormAtCursor();
         }
-    }
+        #endregion
 
-    public bool ContextFocus { get; private set; }
+        #region Form Initialization
+        private void InitializeForm()
+        {
+            Text = "BlurInput Menu";
+            Size = new Size(FORM_WIDTH, FORM_HEIGHT);
+            BackColor = _backgroundColor;
+            FormBorderStyle = FormBorderStyle.None;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ControlBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            TopMost = true; // Ensure form stays on top
+        }
+
+        private void SetupKeyHandling()
+        {
+            KeyPreview = true;
+            KeyDown += ContextForm_KeyDown;
+        }
+
+        private void CreateButtons()
+        {
+            var buttons = new[]
+            {
+                CreateContextButton("Undo", "\uE10E", (s, e) => ExecuteAction(_measure.Undo)),
+                CreateContextButton("Redo", "\uE10D", (s, e) => ExecuteAction(_measure.Redo)),
+                CreateContextButton("Copy", "\uE16F", (s, e) => ExecuteAction(_measure.CopyToClipboard)),
+                CreateContextButton("Paste", "\uE16D", (s, e) => ExecuteAction(_measure.PasteFromClipboard)),
+                CreateContextButton("Clear Text", "\uE107", (s, e) => ExecuteAction(_measure.ClearText)),
+                CreateContextButton("Cancel", "\uE10A", (s, e) => Close())
+            };
+
+            int yPosition = FIRST_BUTTON_Y;
+            foreach (var button in buttons)
+            {
+                button.Location = new Point((FORM_WIDTH - BUTTON_WIDTH) / 2, yPosition);
+                Controls.Add(button);
+                yPosition += BUTTON_MARGIN;
+            }
+        }
+
+        private void CenterFormAtCursor()
+        {
+            var cursorPosition = Cursor.Position;
+            Location = new Point(
+                cursorPosition.X - (Size.Width / 2),
+                cursorPosition.Y
+            );
+
+            // Ensure form stays within screen bounds
+            EnsureFormWithinScreenBounds();
+        }
+
+        private void EnsureFormWithinScreenBounds()
+        {
+            var screen = Screen.FromPoint(Location);
+            var workingArea = screen.WorkingArea;
+
+            int x = Math.Max(workingArea.Left, Math.Min(Location.X, workingArea.Right - Width));
+            int y = Math.Max(workingArea.Top, Math.Min(Location.Y, workingArea.Bottom - Height));
+
+            Location = new Point(x, y);
+        }
+        #endregion
+
+        #region Button Creation
+        private Button CreateContextButton(string text, string iconUnicode, EventHandler clickHandler)
+        {
+            var button = new Button
+            {
+                Text = $"{iconUnicode} {text}",
+                Font = new Font("Segoe UI Symbol", 10, FontStyle.Bold),
+                ForeColor = _textColor,
+                BackColor = _buttonColor,
+                FlatStyle = FlatStyle.Flat,
+                Size = new Size(BUTTON_WIDTH, BUTTON_HEIGHT),
+                Cursor = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseVisualStyleBackColor = false
+            };
+
+            button.FlatAppearance.BorderSize = 0;
+            button.Click += clickHandler;
+
+            // Add hover effects
+            button.MouseEnter += (s, e) => button.BackColor = ControlPaint.Light(_buttonColor, 0.2f);
+            button.MouseLeave += (s, e) => button.BackColor = _buttonColor;
+
+            return button;
+        }
+        #endregion
+
+        #region Event Handlers
+        private void ContextForm_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                CloseForm();
+                e.Handled = true;
+            }
+        }
+
+        private void ExecuteAction(Action action)
+        {
+            try
+            {
+                action?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't crash the application
+                System.Diagnostics.Debug.WriteLine($"Error executing context menu action: {ex.Message}");
+            }
+            finally
+            {
+                CloseForm();
+            }
+        }
+
+        // Public method to close the form programmatically
+        public void CloseForm()
+        {
+            if (!IsDisposed && !Disposing)
+            {
+                _measure.ContextFocusForm = true;
+                _measure.ContextFormOpen = false;
+
+                // Use BeginInvoke to close on UI thread
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(() => Close()));
+                }
+                else
+                {
+                    Close();
+                }
+            }
+        }
+
+        #endregion
+    }
 }
-    
