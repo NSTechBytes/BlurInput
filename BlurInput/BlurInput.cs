@@ -21,20 +21,7 @@ namespace PluginBlurInput
         private const int RESET_TIMER_DELAY = 50;
         #endregion
 
-        #region Win32 API
-        [DllImport("user32.dll")]
-        private static extern short GetAsyncKeyState(int vKey);
-
-        [DllImport("user32.dll")]
-        private static extern short GetKeyState(int nVirtKey);
-
-        [DllImport("user32.dll")]
-        private static extern int ToUnicode(uint virtualKey, uint scanCode, byte[] keyboardState,
-            [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder receivingBuffer, int bufferSize, uint flags);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetKeyboardState(byte[] lpKeyState);
-        #endregion
+        // Note: Win32 API calls are now handled by the InputHandler module
 
         #region Fields
         private Rainmeter.API _api;
@@ -350,28 +337,23 @@ namespace PluginBlurInput
 
         private void HandleKeyboardInput()
         {
-            bool ctrlPressed = (GetAsyncKeyState(17) & 0x8000) != 0;
-            bool shiftPressed = (GetAsyncKeyState(16) & 0x8000) != 0;
-            bool capsLockActive = (GetKeyState(20) & 0x0001) != 0;
+            var keyInput = InputHandler.GetKeyboardInput();
+            if (keyInput == null) return;
 
-            for (int i = 8; i <= 255; i++)
+            // Handle Ctrl+Enter
+            if (keyInput.VirtualKeyCode == InputHandler.VK_RETURN && keyInput.IsCtrlPressed)
             {
-                if ((GetAsyncKeyState(i) & 0x0001) == 0) continue;
-
-                if (i == 13 && ctrlPressed)
-                {
-                    HandleCtrlEnter();
-                    return;
-                }
-
-                if (ctrlPressed)
-                    HandleCtrlShortcuts(i);
-                else
-                    HandleSpecialKeys(i, shiftPressed, ctrlPressed);
-
-                UpdateDisplay();
-                break;
+                HandleCtrlEnter();
+                return;
             }
+
+            // Handle Ctrl shortcuts
+            if (keyInput.IsCtrlPressed)
+                HandleCtrlShortcuts(keyInput.VirtualKeyCode);
+            else
+                HandleSpecialKeys(keyInput.VirtualKeyCode, keyInput.IsShiftPressed, keyInput.IsCtrlPressed);
+
+            UpdateDisplay();
         }
         #endregion
 
@@ -380,11 +362,11 @@ namespace PluginBlurInput
         {
             switch (keyCode)
             {
-                case 67: CopyToClipboard(); break;      // Ctrl+C
-                case 86: PasteFromClipboard(); break;   // Ctrl+V
-                case 88: CutToClipboard(); break;       // Ctrl+X
-                case 90: Undo(); break;                 // Ctrl+Z
-                case 89: Redo(); break;                 // Ctrl+Y
+                case InputHandler.VK_C: CopyToClipboard(); break;      // Ctrl+C
+                case InputHandler.VK_V: PasteFromClipboard(); break;   // Ctrl+V
+                case InputHandler.VK_X: CutToClipboard(); break;       // Ctrl+X
+                case InputHandler.VK_Z: Undo(); break;                 // Ctrl+Z
+                case InputHandler.VK_Y: Redo(); break;                 // Ctrl+Y
             }
         }
 
@@ -394,18 +376,18 @@ namespace PluginBlurInput
 
             switch (keyCode)
             {
-                case 8: HandleBackspace(); break;
-                case 27: HandleEscape(); break;
-                case 13: HandleEnter(ctrlPressed); break;
-                case 46: HandleDelete(); break;
-                case 37: HandleLeftArrow(); break;
-                case 39: HandleRightArrow(); break;
-                case 36: HandleHome(); break;
-                case 35: HandleEnd(); break;
-                case 9: HandleTab(); break;
-                case 20: /* CapsLock - handled elsewhere */ break;
-                case 38: HandleUpArrow(); break;
-                case 40: HandleDownArrow(); break;
+                case InputHandler.VK_BACKSPACE: HandleBackspace(); break;
+                case InputHandler.VK_ESCAPE: HandleEscape(); break;
+                case InputHandler.VK_RETURN: HandleEnter(ctrlPressed); break;
+                case InputHandler.VK_DELETE: HandleDelete(); break;
+                case InputHandler.VK_LEFT: HandleLeftArrow(); break;
+                case InputHandler.VK_RIGHT: HandleRightArrow(); break;
+                case InputHandler.VK_HOME: HandleHome(); break;
+                case InputHandler.VK_END: HandleEnd(); break;
+                case InputHandler.VK_TAB: HandleTab(); break;
+                case InputHandler.VK_CAPSLOCK: /* CapsLock - handled elsewhere */ break;
+                case InputHandler.VK_UP: HandleUpArrow(); break;
+                case InputHandler.VK_DOWN: HandleDownArrow(); break;
                 default: HandleCharacterInput(keyCode); break;
             }
         }
@@ -491,7 +473,7 @@ namespace PluginBlurInput
 
         private void HandleCharacterInput(int keyCode)
         {
-            char keyChar = MapKeyToCharacterDynamic(keyCode);
+            char keyChar = InputHandler.MapKeyToCharacter(keyCode);
             if (keyChar != '\0' && _validator.IsValidInput(keyChar, _config.InputType, _cursorPosition))
             {
                 InsertText(keyChar.ToString());
@@ -729,17 +711,7 @@ namespace PluginBlurInput
             _cursorManager.ResetPreferredColumn();
         }
 
-        private char MapKeyToCharacterDynamic(int keyCode)
-        {
-            var result = new StringBuilder(2);
-            var keyboardState = new byte[256];
 
-            if (!GetKeyboardState(keyboardState))
-                return '\0';
-
-            int charsWritten = ToUnicode((uint)keyCode, 0, keyboardState, result, result.Capacity, 0);
-            return charsWritten == 1 ? result[0] : '\0';
-        }
 
         private Point GetMousePosition() => Cursor.Position;
 

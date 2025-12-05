@@ -86,6 +86,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="BlurInput.cs" />
+    <Compile Include="InputHandler.cs" />
     <Compile Include="$(SolutionDir).\API\RainmeterAPI.cs" />
     <Compile Include="Context.cs">
       <SubType>Form</SubType>
